@@ -15,6 +15,10 @@ const baseStyle = (fill: number): TextStyle =>
     lineHeight: LINE_HEIGHT,
   });
 
+// Optional badge string shown at the top of the footer (e.g.
+// "online — 2 players" or "local — 4 players"). null hides the line.
+export type HudBadge = string | null;
+
 // Top-left overlay. Lives inside gameRoot (logical 480×270 coordinates)
 // so it scales with the rest of the view. Each archer gets its own Text
 // so the player id can be tinted in its slot colour — Pixi Text doesn't
@@ -28,15 +32,20 @@ export class HudRenderer {
   constructor() {
     this.view = new Container();
 
-    // Footer (arrows count, fps, reset hint) shares one Text — same
-    // colour, multi-line.
+    // Footer (badge, arrows count, fps, reset hint) shares one Text —
+    // same colour, multi-line.
     this.footer = new Text({ text: "", style: baseStyle(HUD_TEXT_COLOR) });
     this.footer.x = PADDING;
     this.footer.resolution = 2;
     this.view.addChild(this.footer);
   }
 
-  update(world: World, fps: number, playerIds: ReadonlyArray<string>): void {
+  update(
+    world: World,
+    fps: number,
+    playerIds: ReadonlyArray<string>,
+    badge: HudBadge = null,
+  ): void {
     // Ensure a Text line per player, in slot order. Allocate lazily so a
     // PLAYER_COUNT bump doesn't require touching this file.
     let y = PADDING;
@@ -68,11 +77,14 @@ export class HudRenderer {
     }
 
     this.footer.y = y;
-    this.footer.text = [
+    const lines: string[] = [];
+    if (badge !== null) lines.push(badge);
+    lines.push(
       `arrows: ${world.arrows.length}`,
       `fps: ${Math.round(fps)}`,
       `[Backspace] reset`,
-    ].join("\n");
+    );
+    this.footer.text = lines.join("\n");
   }
 
   dispose(): void {
