@@ -21,7 +21,7 @@
 
 ## Phase 4 — Rendu client local (terminé)
 
-✅ Livrée dans la PR `feat/client-render` : <PR_URL_PLACEHOLDER>
+✅ Livrée dans la PR `feat/client-render` : <https://github.com/SaadBkz/arrowfall/pull/5>
 
 - `@arrowfall/client` repensé : entry `main.ts` boote PixiJS v8 (antialias off, canvas crisp), une `class Game` orchestre l'app, et la simulation passe exclusivement par `stepWorld` de `@arrowfall/engine` — zéro logique de jeu côté client.
 - Boucle de jeu **fixed-timestep accumulator** (`game/loop.ts`) : 60 Hz logique, framerate render variable (jusqu'à 144 Hz). Plafond de 5 ticks par frame contre le spiral of death après alt-tab/freeze.
