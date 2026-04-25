@@ -1,0 +1,15 @@
+node_modules
+dist
+build
+.vercel
+pnpm-lock.yaml
+
+# User-authored reference docs — keep author's formatting (tables, line breaks).
+arrowfall-spec.md
+ROADMAP.md
+README.md
+prompt-claude-code-*.md
+packages/engine/README.md
+
+# HTML entry kept as authored.
+packages/client/index.html

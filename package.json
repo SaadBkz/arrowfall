@@ -2,6 +2,7 @@
   "name": "arrowfall",
   "version": "0.0.1",
   "private": true,
+  "type": "module",
   "description": "Clone fonctionnel de TowerFall — jeu d'action 2D pixel art, multijoueur en ligne navigateur PC.",
   "packageManager": "pnpm@10.33.2",
   "engines": {
@@ -11,12 +12,20 @@
     "build": "pnpm -r build",
     "dev": "pnpm -r --parallel dev",
     "test": "pnpm -r test",
-    "lint": "pnpm -r lint",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.0",
     "@types/node": "^25.6.0",
+    "eslint": "^9.39.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.5.0",
+    "prettier": "^3.6.4",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.50.0",
     "vitest": "^4.1.5"
   },
   "pnpm": {
