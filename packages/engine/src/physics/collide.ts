@@ -24,14 +24,20 @@ const EPSILON = 1e-6;
 // Both use a small probe past the body edge to detect the tile that the
 // body is flush against.
 
+// Tile-range helpers for an AABB span [a, a+s). Treats the half-open
+// interval correctly for fractional positions: a body whose right edge
+// is exactly at a tile boundary does NOT intersect the tile past it
+// (matches Phase 1's "touching ≠ intersecting" convention) but a body
+// 0.001 px past it does. Using `(a + s - 1)` was tempting but only
+// works for integer pixel positions — sub-pixel velocities break it.
 const tileColRangeForX = (x: number, w: number): readonly [number, number] => [
   Math.floor(x / TILE_SIZE),
-  Math.floor((x + w - 1) / TILE_SIZE),
+  Math.ceil((x + w) / TILE_SIZE) - 1,
 ];
 
 const tileRowRangeForY = (y: number, h: number): readonly [number, number] => [
   Math.floor(y / TILE_SIZE),
-  Math.floor((y + h - 1) / TILE_SIZE),
+  Math.ceil((y + h) / TILE_SIZE) - 1,
 ];
 
 export type SweepXResult = { readonly x: number; readonly hit: boolean };
@@ -54,8 +60,8 @@ export const sweepX = (map: MapData, aabb: AABB, dx: number): SweepXResult => {
   const endX = aabb.x + dx;
 
   if (dx > 0) {
-    const startCol = Math.floor((aabb.x + aabb.w - 1) / TILE_SIZE);
-    const endCol = Math.floor((endX + aabb.w - 1) / TILE_SIZE);
+    const startCol = Math.ceil((aabb.x + aabb.w) / TILE_SIZE) - 1;
+    const endCol = Math.ceil((endX + aabb.w) / TILE_SIZE) - 1;
     for (let c = startCol + 1; c <= endCol; c++) {
       for (let r = tileTop; r <= tileBottom; r++) {
         if (isSolid(tileAt(map, c, r))) {
@@ -101,8 +107,8 @@ export const sweepY = (
   const endY = aabb.y + dy;
 
   if (dy > 0) {
-    const startRow = Math.floor((aabb.y + aabb.h - 1) / TILE_SIZE);
-    const endRow = Math.floor((endY + aabb.h - 1) / TILE_SIZE);
+    const startRow = Math.ceil((aabb.y + aabb.h) / TILE_SIZE) - 1;
+    const endRow = Math.ceil((endY + aabb.h) / TILE_SIZE) - 1;
     for (let r = startRow + 1; r <= endRow; r++) {
       const tileTopY = r * TILE_SIZE;
       for (let c = tileLeft; c <= tileRight; c++) {
