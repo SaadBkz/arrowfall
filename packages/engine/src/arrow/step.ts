@@ -1,11 +1,12 @@
 import {
+  ARROW_GROUNDED_PICKUP_DELAY,
   type MapData,
   GRAVITY,
   MAX_FALL_SPEED,
 } from "@arrowfall/shared";
 import { sweepX, sweepY } from "../physics/collide.js";
 import { wrapPosition } from "../tilemap/grid.js";
-import { type Arrow, arrowAabb } from "./types.js";
+import { type Arrow, type ArrowStatus, arrowAabb } from "./types.js";
 
 // Pure: returns a fresh Arrow.
 //
@@ -52,13 +53,19 @@ export const stepArrow = (arrow: Arrow, map: MapData): Arrow => {
   const wrapped = wrapPosition({ x: xResult.x, y: yResult.y });
 
   if (hit) {
+    // Distinguish floor-landing (grounded, lies flat) from wall/ceiling
+    // impact (embedded, sticks out of the surface). Both are pickable
+    // after ARROW_GROUNDED_PICKUP_DELAY frames; the distinction is
+    // mostly cosmetic for the renderer.
+    const status: ArrowStatus =
+      yResult.hit === "ground" ? "grounded" : "embedded";
     return {
       ...arrow,
       pos: wrapped,
       vel: { x: 0, y: 0 },
-      status: "embedded",
+      status,
       age,
-      groundedTimer: 0,
+      groundedTimer: ARROW_GROUNDED_PICKUP_DELAY,
     };
   }
 
