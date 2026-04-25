@@ -21,7 +21,7 @@
 
 ## Phase 3 — Combat (terminé)
 
-✅ Livrée dans la PR `feat/combat-arrows` : <PLACEHOLDER_PR_URL>
+✅ Livrée dans la PR `feat/combat-arrows` : <https://github.com/SaadBkz/arrowfall/pull/4>
 
 - `@arrowfall/shared` : `ArcherInput` étendu (`shoot` edge + `aimDirection: Direction8 | null`), helper `aimVector(input, facing)`, constantes Phase 3 (`SHOOT_COOLDOWN_FRAMES=8`, `ARROW_SPEED=5`, `MAX_INVENTORY=5`, `SPAWN_ARROW_COUNT=3`, `SPAWN_IFRAME_FRAMES=60`, `DEATH_DURATION_FRAMES=30`, `ARROW_GROUNDED_PICKUP_DELAY=10`, `HEAD_HITBOX_H=3`).
 - `@arrowfall/engine/arrow` : `Arrow` (hitbox 8×2, statuts `flying`/`grounded`/`embedded`), `stepArrow` semi-implicit Euler clampé à `MAX_FALL_SPEED`, sweep SOLID-only (JUMPTHRU/SPIKE passables), wrap au seam, distinction floor-landing (`grounded`) vs wall-impact (`embedded`). `dropArrowsOnDeath` éjecte N flèches selon un schéma déterministe à N angles également espacés dans `(-π, 0)` — pas de PRNG.
