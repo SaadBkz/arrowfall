@@ -9,17 +9,38 @@ import {
 } from "@arrowfall/shared";
 import { type Application, Container, Graphics } from "pixi.js";
 import { BG_COLOR } from "./colors.js";
-import { KeyboardInput } from "./input.js";
+import { KeyboardInput, PLAYER_BINDINGS } from "./input.js";
 import { runFixedStep } from "./loop.js";
 import { ArchersRenderer } from "./render/archer.js";
 import { ArrowsRenderer } from "./render/arrow.js";
 import { HudRenderer } from "./render/hud.js";
+import { RoundMessageRenderer } from "./render/round-message.js";
 import { TilemapRenderer } from "./render/tilemap.js";
-import arenaJson from "../maps/arena-01.json" with { type: "json" };
+import { getRoundOutcome } from "./round-state.js";
+import arena01Json from "../maps/arena-01.json" with { type: "json" };
+import arena02Json from "../maps/arena-02.json" with { type: "json" };
 
-// Fallback when archerColorFor decides to use the slot index — see
-// archerColorFor; here we have just one archer so slot 0 fits.
-const PLAYER_ID = "p1";
+// Phase 5 — hot-seat. Bump up to 4 to test 4-player on arena-02.
+// Anything above 4 will reuse PLAYER_BINDINGS modulo length so it won't
+// crash, but ergonomics break down past 2 players on a single keyboard
+// (N-key rollover anti-ghost matrices) — gamepads are Phase 11.
+const PLAYER_COUNT = 2;
+
+// Maps switch automatically on PLAYER_COUNT: arena-01 ships with 2
+// spawns (the existing 2P map), arena-02 ships with 4 spawns laid out
+// quinconce so each quadrant gets one. createWorld wraps modulo if the
+// counts don't match, so a 4-spawn map on a 2P round is harmless.
+const MAP_FOR_2P = arena01Json as MapJson;
+const MAP_FOR_4P = arena02Json as MapJson;
+
+const playerIds = (count: number): ReadonlyArray<string> => {
+  // Pick the first `count` ids from PLAYER_BINDINGS so the keyboard is
+  // wired exactly to the players we spawn. The order matches slot index
+  // (p1=red, p2=blue, p3=green, p4=yellow per `archerColorFor`).
+  const ids = PLAYER_BINDINGS.slice(0, count).map((b) => b.id);
+  if (ids.length === 0) throw new Error("PLAYER_COUNT must be ≥ 1");
+  return ids;
+};
 
 // One Game per page lifetime. Owns the Pixi app's stage tree, the
 // engine `World` (mutated in place via reassignment), input listeners
@@ -33,8 +54,10 @@ export class Game {
   private readonly archers: ArchersRenderer;
   private readonly arrows: ArrowsRenderer;
   private readonly hud: HudRenderer;
+  private readonly roundMessage: RoundMessageRenderer;
   private readonly input: KeyboardInput;
 
+  private readonly playerIds: ReadonlyArray<string>;
   private world: World;
   private accumulator = 0;
   private fps = 60;
@@ -44,10 +67,12 @@ export class Game {
 
   constructor(app: Application) {
     this.app = app;
+    this.playerIds = playerIds(PLAYER_COUNT);
 
-    const map = parseMap(arenaJson as MapJson);
+    const mapJson = PLAYER_COUNT >= 3 ? MAP_FOR_4P : MAP_FOR_2P;
+    const map = parseMap(mapJson);
     if (map.spawns.length === 0) {
-      throw new Error("arena-01: no SPAWN tile");
+      throw new Error(`${map.id}: no SPAWN tile`);
     }
     this.spawnPx = map.spawns.map((s) => ({
       x: s.x * TILE_SIZE,
@@ -76,12 +101,20 @@ export class Game {
     this.hud = new HudRenderer();
     this.gameRoot.addChild(this.hud.view);
 
-    this.world = createWorld(map, this.spawnPx, [PLAYER_ID]);
+    // Round-end overlay sits on top of everything so it stays readable
+    // on top of fragmentation animations.
+    this.roundMessage = new RoundMessageRenderer();
+    this.gameRoot.addChild(this.roundMessage.view);
 
-    this.input = new KeyboardInput();
+    this.world = createWorld(map, this.spawnPx, this.playerIds);
 
-    this.tickerCallback = () => this.tick();
-    this.resizeListener = () => this.applyScale();
+    // Only wire the active players' bindings — otherwise inactive slots
+    // would silently swallow their keys (preventDefault) and consume CPU
+    // looping over them on every keydown.
+    this.input = new KeyboardInput(PLAYER_BINDINGS.slice(0, PLAYER_COUNT));
+
+    this.tickerCallback = (): void => this.tick();
+    this.resizeListener = (): void => this.applyScale();
   }
 
   start(): void {
@@ -99,6 +132,7 @@ export class Game {
     this.archers.dispose();
     this.arrows.dispose();
     this.hud.dispose();
+    this.roundMessage.dispose();
   }
 
   // Computes the largest integer scale that fits 480×270 inside the
@@ -116,7 +150,7 @@ export class Game {
 
   private resetWorld(): void {
     const map = this.world.map;
-    this.world = createWorld(map, this.spawnPx, [PLAYER_ID]);
+    this.world = createWorld(map, this.spawnPx, this.playerIds);
     this.accumulator = 0;
   }
 
@@ -131,10 +165,16 @@ export class Game {
     this.fps = this.app.ticker.FPS;
 
     const stepFn = (): void => {
-      const archerInput: ArcherInput = this.input.snapshot();
-      const inputs = new Map<string, ArcherInput>([[PLAYER_ID, archerInput]]);
+      const inputs = new Map<string, ArcherInput>();
+      for (const id of this.playerIds) {
+        inputs.set(id, this.input.snapshot(id));
+      }
       this.world = stepWorld(this.world, inputs);
-      this.input.consumeEdges();
+      // Acknowledge each player's edges so a single press doesn't fire
+      // shoot/dodge/jump on multiple ticks.
+      for (const id of this.playerIds) {
+        this.input.consumeEdges(id);
+      }
     };
 
     this.accumulator = runFixedStep(this.app.ticker.deltaMS, this.accumulator, stepFn);
@@ -142,7 +182,8 @@ export class Game {
     // Render the freshest world state.
     this.archers.render(sortedArchers(this.world));
     this.arrows.render(this.world.arrows);
-    this.hud.update(this.world, this.fps);
+    this.hud.update(this.world, this.fps, this.playerIds);
+    this.roundMessage.render(getRoundOutcome(this.world));
   }
 }
 
