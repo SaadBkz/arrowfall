@@ -1,6 +1,6 @@
 # `@arrowfall/client`
 
-Client navigateur — rendu PixiJS v8, capture clavier, boucle de jeu. **Aucune logique de jeu** : toute la physique passe par `@arrowfall/engine` (la même que le serveur autoritatif tournera en Phase 6).
+Client navigateur — rendu PixiJS v8, capture clavier, boucle de jeu. **Aucune logique de jeu côté client** : toute la physique passe par `@arrowfall/engine`. Depuis la Phase 6, le serveur Colyseus tient la simulation autoritaire (`stepWorld` à 60 Hz côté serveur) et le client est en mode rendu pur lorsqu'il est en networked. Sans le toggle `?net=1`, le client tourne en hot-seat local (Phase 5).
 
 ## Lancer en local
 
@@ -17,27 +17,32 @@ Pré-requis : Node ≥ 20, pnpm ≥ 9, deps installées via `pnpm install` à la
 
 ```
 src/
-├── main.ts                  # entry — boot Pixi.Application + Game.start()
+├── main.ts                  # entry — boot Pixi.Application + Game.start(),
+│                              parse `?net=1` flag → mode "local" | "networked"
 ├── style.css                # canvas crisp + body fullscreen
-├── maps/
+├── maps/                    # client-only map fixtures (server has its own copy)
 │   ├── arena-01.json        # 2 spawns (default 2P)
 │   ├── arena-02.json        # 4 spawns en quinconce (PLAYER_COUNT ≥ 3)
-│   └── maps.test.ts         # parse + spawn-count assertions
+│   └── maps.test.ts
+├── net/                     # Phase 6 — networked mode
+│   ├── client.ts            # connectToArena() — colyseus.js wrapper, auto URL
+│   ├── schema.ts            # client mirror of server's MatchState/Archer/Arrow
+│   ├── match-mirror.ts      # matchStateToWorld(state, mapData) → engine.World
+│   └── index.ts             # barrel
 └── game/
     ├── index.ts             # class Game — owns stage, World, ticker, input,
-    │                          PLAYER_COUNT (2..4), map switch
-    ├── input.ts             # keyboard → ArcherInput per player (Map<id, KeyState>)
-    │                          PLAYER_BINDINGS data-driven, blur reset
-    ├── loop.ts              # fixed-timestep accumulator (60 Hz logique)
-    ├── colors.ts            # palette unifiée + archerColorFor(id, slot)
-    ├── round-state.ts       # pure getRoundOutcome(world) → ongoing/win/draw
-    ├── round-state.test.ts  # vitest cases
+    │                          PLAYER_COUNT (2..4), map switch, mode toggle
+    ├── input.ts             # keyboard → ArcherInput per player
+    ├── loop.ts              # fixed-timestep accumulator (60 Hz, local only)
+    ├── colors.ts
+    ├── round-state.ts
+    ├── round-state.test.ts
     └── render/
-        ├── tilemap.ts       # static bake d'une MapData via Graphics
-        ├── archer.ts        # corps 8×11 + tête 8×3 + facing pixel
-        ├── arrow.ts         # rect 8×2 rotated (flying) ou flat (grounded)
-        ├── hud.ts           # Text top-left, 1 line par joueur (couleur du slot)
-        └── round-message.ts # « PX wins! » / « Draw! » centré
+        ├── tilemap.ts
+        ├── archer.ts
+        ├── arrow.ts
+        ├── hud.ts           # +badge "online — N players" / "local — N players"
+        └── round-message.ts
 ```
 
 ## Hot-seat — bindings clavier multi-joueurs
@@ -123,3 +128,36 @@ pnpm --filter @arrowfall/client test
 ```
 
 Pas de tests browser (Playwright/Cypress = trop d'overhead). L'engine reste **125/125 verts** ; aucune modif de `@arrowfall/engine` ou `@arrowfall/shared` dans cette phase (multi-archers déjà câblé Phase 3).
+
+## Mode networked (Phase 6)
+
+Le toggle URL `?net=1` bascule le client en mode réseau. Sans le flag, le hot-seat Phase 5 est inchangé.
+
+```
+http://localhost:5173/             → mode local (hot-seat 2-4P)
+http://localhost:5173/?net=1       → mode networked (Colyseus arena room)
+```
+
+| | Local | Networked (`?net=1`) |
+|---|---|---|
+| `stepWorld` | client (60 Hz fixed-step) | serveur uniquement |
+| Inputs | mappés sur 2-4 slots clavier | seul P1 (`←/→/↑/↓/Espace/J/K`) → `room.send("input")` |
+| Reset (`Backspace`) | recrée le `World` local | `room.send("reset")` (dev only) |
+| Joueurs | 2-4 sur le même clavier | 1 par onglet |
+| Map | `arena-01` (2P) ou `arena-02` (≥3P) | `arena-01` |
+| HUD badge | « local — N players » | « connecting… » → « online — N players » → « error: … » |
+
+URL serveur :
+
+1. `VITE_COLYSEUS_URL` (env) override tout.
+2. Sinon, `import.meta.env.PROD` ? `wss://arrowfall-server.fly.dev` : `ws://localhost:2567`.
+
+Sur erreur de connexion (server down, mismatch schéma, etc.), le HUD affiche « error: <message> » et la simulation locale ne tourne pas — recharger sans `?net=1` pour revenir au hot-seat.
+
+### Schéma client (mirror du serveur)
+
+`packages/client/src/net/schema.ts` redéclare `MatchState/ArcherState/ArrowState` à l'identique du serveur. `@colyseus/schema` exige des classes wire-compatibles aux deux extrémités (mêmes champs, même ordre, mêmes types primitifs). Drift = corruption silencieuse — toute modif d'un champ schéma doit être appliquée des deux côtés en lockstep.
+
+### `useDefineForClassFields` — pourquoi `declare`
+
+Les schémas utilisent `declare field: T;` au lieu de `field!: T;` parce que sous `useDefineForClassFields: true` (défaut TS pour `target: ES2022+`), même les définitions `field!:` émettent un `Object.defineProperty` qui shadow les getters/setters installés par `Schema.initialize`. Conséquence : les MapSchema/ArraySchema ne reçoivent pas leur `~childType` et l'encodage casse au premier patch. `declare` n'émet aucun champ — le prototype reste intact, les assignations dans le constructeur déclenchent les setters comme attendu par `@colyseus/schema`.

@@ -12,12 +12,26 @@
 | **3** | Combat — flèches normales, tir, ramassage, stomp, catch, mort | tests + démo headless | ✅ |
 | **4** | Rendu client local — PixiJS sprite, contrôle clavier, 1 archer | démo locale jouable solo | ✅ |
 | **5** | Hot-seat 2-4 archers même clavier | démo locale 2-4 joueurs | ✅ |
-| **6** | Colyseus state schema + sync naïve | 2 onglets, état partagé | ⏳ |
+| **6** | Colyseus state schema + sync naïve | 2 onglets, état partagé | ✅ |
 | **7** | Client prediction + reconciliation + interpolation | latence ressentie < 100 ms | ⏳ |
 | **8** | Lobby, code de room 4 lettres, écran fin de round/match | match complet 2 joueurs distants | ⏳ |
 | **9** | Coffres + flèches Bomb, Drill, Laser + Shield | mécaniques complètes | ⏳ |
 | **10** | 3 maps designées + intégration assets pixel art CC0 | jeu visuel complet | ⏳ |
 | **11** | SFX + musique CC0 + polish + gamepad + fullscreen | MVP livré | ⏳ |
+
+## Phase 6 — Colyseus state schema + sync naïve (terminé)
+
+✅ Livrée dans la PR `feat/colyseus-sync` : *(URL backfill après merge)*
+
+- **Mismatch Colyseus résolu (Option B)** : downgrade serveur en `colyseus@0.16.5` + `@colyseus/schema@^3.0.0`, aligné avec `colyseus.js@0.16.22`. `pnpm.overrides` racine pin tout l'écosystème (`@colyseus/core`, `auth`, `redis-driver`, `redis-presence`, `uwebsockets-transport`, `ws-transport`, `schema`) en 0.16.x — sinon les sub-packages remontaient du 0.17 en transitif. `colyseus.js@0.17` non publié sur npm au moment du choix.
+- **State schema** (`packages/server/src/state/`) : `MatchState` (`tick: uint32`, `mapId: string`, `archers: MapSchema<ArcherState>` keyé par sessionId, `arrows: ArraySchema<ArrowState>`). Vec2 fields aplatis (`posX/posY` séparés) pour patcher proprement. `worldToMatchState(world, state, archerIdBySessionId)` mutateur idempotent — réutilise les instances pour minimiser la diff wire.
+- **`ArenaRoom`** (`packages/server/src/rooms/`) : `maxClients=6`, `setSimulationInterval(simulate, 1000/60)` (60 Hz logique), `setPatchRate(1000/30)` (30 Hz broadcast). Mid-round join/leave : rebuild complet du World (les positions des autres joueurs se reset — Phase 8 fera mieux). `onMessage("input")` strict-validé, dernier wins ; `onMessage("reset")` gated `NODE_ENV !== "production"`. Le World autoritatif vit dans une propriété privée — l'état Colyseus est un *miroir* dérivé, pas la vérité.
+- **Client networking** (`packages/client/src/net/`) : `client.ts` wrapper `colyseus.js` avec auto URL (`VITE_COLYSEUS_URL` > `wss://arrowfall-server.fly.dev` en prod > `ws://localhost:2567` en dev). `schema.ts` redéclare le schéma serveur en lockstep (drift = corruption). `match-mirror.ts` traduit `MatchState` vers le `World` engine pour réutiliser les renderers Phase 4/5 inchangés.
+- **Toggle `?net=1`** dans `main.ts` : flippe `Game` en mode networked. Sans flag, hot-seat Phase 5 inchangé. En networked : seul P1 wired (clavier ergonomique), `stepWorld` jamais appelé localement, le World est rebuild à chaque frame depuis `room.state`. HUD badge « online — N players » / « connecting… » / « error: … ».
+- **Bug critique trouvé en validation** : sous `useDefineForClassFields: true` (TS default ES2022+), les définitions `field!: T;` émettent un `Object.defineProperty` qui shadow les accessors installés par `Schema.initialize` — `~childType` n'arrive jamais sur les MapSchema/ArraySchema, `encodeAll` throw au premier patch. Fix : utiliser `declare field: T;` qui n'émet rien (constructor-body assignments fire les setters comme attendu par `@colyseus/schema`).
+- **Validation cross-tab end-to-end** : 2 clients colyseus.js connectés au serveur local, voient les archers de l'autre, le mouvement de p1 (30 frames de walk-right de x=32 à x=139) est répliqué dans la vue de p2.
+- **Tests** : engine 125/125 + client 7/7 (aucune régression) + **server 23/23 nouveaux** (vitest config dans `packages/server`, `validate-input.test.ts` 9 cas, `to-state.test.ts` 6 cas, `arena-room.test.ts` 8 cas — onJoin/onLeave/handleInput/simulate/state mirror/tick monotonicity).
+- **Dockerfile** étendu pour copier `packages/{shared,engine}` (le serveur en a besoin maintenant) et utiliser `pnpm install --frozen-lockfile --filter @arrowfall/server...` (trois points = inclure les workspace deps).
 
 ## Phase 5 — Hot-seat 2-4 archers (terminé)
 
