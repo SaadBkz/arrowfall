@@ -77,6 +77,14 @@ pnpm --filter @arrowfall/engine test
 
 La suite couvre la math 2D (`Vec2`, `AABB`, `Direction8`), le loader tilemap (parse/serialize round-trip + erreurs avec ligne/colonne), les utilitaires de grille wrap-aware (480×270), et un test déterministe pivot de la gravité (deux runs parallèles bit-identiques sur 200 frames).
 
+## Phase 2 — Mouvement archer
+
+L'archer est une state machine pure (`idle` ↔ `dodging`) implémentée dans [`packages/engine/src/archer/`](./packages/engine/src/archer/). L'API publique est `stepArcher(archer, input, map)` qui orchestre walk → jump → gravité → fast-fall → moveAndCollide → wrap dans cet ordre exact, avec hitbox 8×11 et collision tilemap axis-separated (sweepX puis sweepY) gérant la sémantique « JUMPTHRU = solide uniquement quand on descend depuis au-dessus ». Coyote, jump buffer et wall-jump sont en place ; le timer d'iframe du dodge est exposé pour la Phase 3 (catch d'arrow). Suite de tests à jour avec un pivot déterministe 600 frames bit-identique sur deux runs parallèles.
+
+```bash
+pnpm --filter @arrowfall/engine test
+```
+
 ## Déployer
 
 ### Front sur Vercel

@@ -8,7 +8,7 @@
 |---|---|---|---|
 | **0** | Setup (ce prompt #1) | hello world déployé front + back | ✅ |
 | **1** | Bootstrap engine — tilemap loader, types partagés, math 2D | tests Vitest verts sur `engine` | ✅ |
-| **2** | Mouvement archer — gravité, marche, saut, dodge, wall-jump, wrap | suite de tests deterministes du `engine` | ⏳ |
+| **2** | Mouvement archer — gravité, marche, saut, dodge, wall-jump, wrap | suite de tests deterministes du `engine` | ✅ |
 | **3** | Combat — flèches normales, tir, ramassage, stomp, catch, mort | tests + démo headless | ⏳ |
 | **4** | Rendu client local — PixiJS sprite, contrôle clavier, 1 archer | démo locale jouable solo | ⏳ |
 | **5** | Hot-seat 2-4 archers même clavier | démo locale 2-4 joueurs | ⏳ |
@@ -18,6 +18,15 @@
 | **9** | Coffres + flèches Bomb, Drill, Laser + Shield | mécaniques complètes | ⏳ |
 | **10** | 3 maps designées + intégration assets pixel art CC0 | jeu visuel complet | ⏳ |
 | **11** | SFX + musique CC0 + polish + gamepad + fullscreen | MVP livré | ⏳ |
+
+## Phase 2 — Mouvement archer (terminé)
+
+✅ Livrée dans la PR `feat/archer-movement` : <https://github.com/SaadBkz/arrowfall/pull/3>
+
+- `@arrowfall/shared` : `ArcherInput` (edges `jump`/`dodge`, levels `left`/`right`/`up`/`down`/`jumpHeld`) + `inputDirection()` qui mappe les 4 dpad vers `Direction8`.
+- `@arrowfall/engine/physics/collide` : sweep axis-separated (`sweepX`/`sweepY`/`moveAndCollide`) + probes `isOnGround`/`isTouchingWall`, sémantique JUMPTHRU avec `prevBottom`, hitbox 8×11, wrap-aware via `tileAt`.
+- `@arrowfall/engine/archer` : state machine `idle`↔`dodging`, modules pures `applyWalk`/`applyJump`/`applyDodge`/`applyFastFall` + orchestrateur `stepArcher`. Coyote (`JUMP_GRACE_FRAMES`), jump buffer (`JUMP_BUFFER_FRAMES`), wall-jump avec kick latéral. Iframe du dodge exposé en sortie pour la Phase 3.
+- 91 tests Vitest (< 1 s) dont le pivot déterministe **600 frames bit-identiques sur deux runs parallèles** (tolérance 0).
 
 ## Phase 1 — Engine bootstrap (terminé)
 
