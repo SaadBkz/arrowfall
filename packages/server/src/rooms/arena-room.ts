@@ -71,21 +71,12 @@ export class ArenaRoom extends Room<MatchState> {
     this.setSimulationInterval((dtMs) => this.simulate(dtMs), SIMULATION_INTERVAL_MS);
     this.setPatchRate(PATCH_INTERVAL_MS);
 
-    this.onMessage("input", (client, payload: unknown) => {
-      const archerId = this.archerIdBySession.get(client.sessionId);
-      if (archerId === undefined) return;
-      this.inputs.set(archerId, validateInput(payload));
-    });
-
-    this.onMessage("reset", (client) => {
-      if (!RESET_ALLOWED) return;
-      console.log(`[arena] reset requested by ${client.sessionId}`);
-      this.world = createWorld(this.mapData, this.spawnsPx, [
-        ...this.archerIdBySession.values(),
-      ]);
-      this.inputs.clear();
-      worldToMatchState(this.world, this.state);
-    });
+    // Wire onMessage handlers to extracted methods so tests can drive
+    // them directly without going through the WS transport.
+    this.onMessage("input", (client, payload: unknown) =>
+      this.handleInput(client.sessionId, payload),
+    );
+    this.onMessage("reset", (client) => this.handleReset(client.sessionId));
 
     console.log(`[arena] room created (mapId=${this.mapData.id})`);
   }
@@ -127,10 +118,25 @@ export class ArenaRoom extends Room<MatchState> {
     );
   }
 
-  // Test hook — exposes the internal world so tests can assert engine
-  // state after onJoin / onMessage. Not used in production code.
+  handleInput(sessionId: string, payload: unknown): void {
+    const archerId = this.archerIdBySession.get(sessionId);
+    if (archerId === undefined) return;
+    this.inputs.set(archerId, validateInput(payload));
+  }
+
+  handleReset(sessionId: string): void {
+    if (!RESET_ALLOWED) return;
+    console.log(`[arena] reset requested by ${sessionId}`);
+    this.rebuildWorld();
+    this.inputs.clear();
+  }
+
+  // Test hooks. Not used in production code.
   getWorldForTest(): World {
     return this.world;
+  }
+  tickForTest(): void {
+    this.simulate(SIMULATION_INTERVAL_MS);
   }
 
   private allocateArcherId(): string | null {
