@@ -1,28 +1,18 @@
 import { createServer } from "node:http";
-import { Server, Room, type Client } from "colyseus";
+import { Server } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
+import { ArenaRoom } from "./rooms/arena-room.js";
 
-class HelloRoom extends Room {
-  override onCreate(): void {
-    console.log("[colyseus] HelloRoom created");
-  }
-
-  override onJoin(client: Client): void {
-    console.log(`[colyseus] client joined: ${client.sessionId}`);
-  }
-
-  override onLeave(client: Client): void {
-    console.log(`[colyseus] client left: ${client.sessionId}`);
-  }
-}
-
-const port = Number(process.env.PORT ?? 2567);
+const port = Number(process.env["PORT"] ?? 2567);
 const httpServer = createServer();
 
 const gameServer = new Server({
   transport: new WebSocketTransport({ server: httpServer }),
 });
-gameServer.define("hello", HelloRoom);
+
+// Single room name for Phase 6 — clients call joinOrCreate("arena").
+// Lobby + room codes (Phase 8) will add more named definitions.
+gameServer.define("arena", ArenaRoom);
 
 await gameServer.listen(port);
-console.log(`[colyseus] listening on http://localhost:${port}`);
+console.log(`[colyseus] arrowfall server listening on http://localhost:${port}`);
