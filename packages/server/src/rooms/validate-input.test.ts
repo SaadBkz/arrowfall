@@ -35,8 +35,8 @@ describe("validateInput", () => {
   });
 
   it("rejects when any boolean field is missing", () => {
-    const broken = { ...VALID } as Partial<ArcherInput>;
-    delete broken.jump;
+    const broken: Record<string, unknown> = { ...VALID };
+    delete broken["jump"];
     expect(validateInput(broken)).toEqual(NEUTRAL_INPUT);
   });
 

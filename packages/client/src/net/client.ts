@@ -1,5 +1,5 @@
 import { Client, type Room } from "colyseus.js";
-import { MatchState } from "./schema.js";
+import type { MatchState } from "./schema.js";
 
 // URL precedence:
 //   1. VITE_COLYSEUS_URL (set in `.env`, `.env.local` or shell env at
