@@ -10,7 +10,7 @@ Clone fonctionnel de **TowerFall** — jeu d'action 2D pixel art, multijoueur en
 - **Front (client PixiJS + Vite)** : <https://arrowfall-ten.vercel.app>
 - **Back (Colyseus on Fly.io, region `cdg`)** : <https://arrowfall-server.fly.dev>
 
-> ⚠️ La connexion WebSocket entre les deux est temporairement bloquée par un mismatch de version Colyseus 0.17 (server) / 0.16 (client). Voir la section _Dette technique_ dans [`ROADMAP.md`](./ROADMAP.md). Sera réglé en Phase 7.
+> ✅ Phase 6 (mai 2026) : la sync Colyseus est désormais opérationnelle (server et client alignés sur 0.16). Voir la section [Phase 6](#phase-6--colyseus-sync-naïve) plus bas.
 
 ## Stack
 
@@ -21,7 +21,7 @@ Clone fonctionnel de **TowerFall** — jeu d'action 2D pixel art, multijoueur en
 | Runtime serveur | Node 20+ |
 | Build client | Vite 8 |
 | Rendu 2D | PixiJS v8 |
-| Game server | Colyseus 0.17 |
+| Game server | Colyseus 0.16 (server + `colyseus.js` aligné) |
 | Tests | Vitest |
 | Hébergement front | Vercel (Hobby) |
 | Hébergement back | Fly.io (shared-cpu-1x, 256 MB, region `cdg`) |
@@ -127,6 +127,35 @@ Les bindings utilisent `event.code` (layout-independent — `KeyA` = position ph
 |---|---|
 
 P3 (vert) et P4 (jaune) sont câblés (Numpad et `[ ] ; ' / \ .`) mais **non validés ergonomiquement** : au-delà de 2 joueurs, les claviers physiques ont du **N-key rollover** limité (anti-ghost matrices) — plusieurs touches simultanées peuvent être ignorées. Les manettes en Phase 11 résoudront ce problème proprement. Tirer sans direction = horizontal vers le facing de l'archer ; combiner directions + tir = visée 8 directions (rappel spec §4.1). La fenêtre d'iframe du dodge sert aussi à catch les flèches (rappel spec §2.4). Les flèches qui sortent par la droite réapparaissent à gauche (wrap continu, spec §5.2).
+
+## Phase 6 — Colyseus sync naïve
+
+Le serveur Colyseus est désormais autoritaire : il tient le `World` engine, simule à 60 Hz et broadcast l'état à 30 Hz vers les clients. Un toggle URL `?net=1` active le mode networked sur le client ; sans le toggle, le hot-seat Phase 5 reste inchangé.
+
+| | Local (par défaut) | Networked (`?net=1`) |
+|---|---|---|
+| Simulation | client (`stepWorld` 60 Hz) | serveur (`stepWorld` 60 Hz) |
+| Inputs | clavier local pour 2-4 archers | clavier P1 → `room.send("input", …)` |
+| Reset | `Backspace` (recrée le `World` local) | `Backspace` → `room.send("reset")` (dev-only) |
+| Joueurs | 2-4 sur le même clavier | 1 par onglet, 2-6 onglets cross-machine |
+| Affichage | « local — N players » | « online — N players » / « connecting… » / « error: … » |
+
+```bash
+# 1. Lance le serveur Colyseus (port 2567)
+pnpm --filter @arrowfall/server dev
+
+# 2. Lance le client Vite (port 5173)
+pnpm --filter @arrowfall/client dev
+
+# 3. Ouvre 2 onglets sur http://localhost:5173/?net=1
+#    Chaque onglet contrôle son propre archer ; tu vois les autres dans le même état.
+```
+
+URL serveur configurable via `VITE_COLYSEUS_URL` (override) ; sinon prod = `wss://arrowfall-server.fly.dev`, dev = `ws://localhost:2567`.
+
+Détails : [`packages/server/README.md`](./packages/server/README.md) (architecture room + schema) et [`packages/client/README.md`](./packages/client/README.md) (mode networked).
+
+La résolution du mismatch Colyseus client/serveur (Option B : downgrade serveur en 0.16) est documentée dans [`packages/server/README.md`](./packages/server/README.md) et la section _Dette technique_ de [`ROADMAP.md`](./ROADMAP.md).
 
 ## Déployer
 

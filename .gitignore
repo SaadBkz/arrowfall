@@ -7,3 +7,4 @@ dist
 .fly
 coverage
 *.log
+prompt-claude-code-*.md

@@ -1,6 +1,12 @@
 import { Application } from "pixi.js";
-import { Game } from "./game/index.js";
+import { Game, type GameMode } from "./game/index.js";
 import "./style.css";
+
+// `?net=1` flips the client into networked mode (Phase 6 — connects to
+// the Colyseus arena room). Anything else (or no param) keeps the
+// Phase 5 hot-seat behaviour. We document this in the client README.
+const params = new URLSearchParams(window.location.search);
+const mode: GameMode = params.get("net") === "1" ? "networked" : "local";
 
 const container = document.getElementById("game");
 if (!container) throw new Error("#game container not found");
@@ -14,7 +20,7 @@ await app.init({
 
 container.appendChild(app.canvas);
 
-const game = new Game(app);
+const game = new Game(app, mode);
 game.start();
 
-console.log("[arrowfall] client booted — phase 4 solo render");
+console.log(`[arrowfall] client booted — mode=${mode}`);

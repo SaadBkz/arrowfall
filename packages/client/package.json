@@ -13,6 +13,7 @@
   "dependencies": {
     "@arrowfall/engine": "workspace:*",
     "@arrowfall/shared": "workspace:*",
+    "@colyseus/schema": "^3.0.0",
     "colyseus.js": "^0.16.22",
     "pixi.js": "^8.18.1"
   },
