@@ -1,0 +1,16 @@
+**/node_modules
+.git
+.github
+.vercel
+.fly
+**/dist
+**/coverage
+**/*.log
+.env
+.env.*
+**/.env
+**/.env.*
+**/.DS_Store
+*.md
+arrowfall-spec.md
+prompt-claude-code-01-setup.md

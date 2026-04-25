@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm --filter @arrowfall/client build",
+  "outputDirectory": "packages/client/dist",
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "framework": null
+}

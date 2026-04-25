@@ -1,0 +1,55 @@
+# ArrowFall — Roadmap
+
+> Plan d'implémentation par phases. Chaque phase = un prompt Claude Code dédié, livré incrémentalement, testable de bout en bout.
+
+## Phases
+
+| Phase | Objectif | Livrable testable | Statut |
+|---|---|---|---|
+| **0** | Setup (ce prompt #1) | hello world déployé front + back | ✅ |
+| **1** | Bootstrap engine — tilemap loader, types partagés, math 2D | tests Vitest verts sur `engine` | ⏳ |
+| **2** | Mouvement archer — gravité, marche, saut, dodge, wall-jump, wrap | suite de tests deterministes du `engine` | ⏳ |
+| **3** | Combat — flèches normales, tir, ramassage, stomp, catch, mort | tests + démo headless | ⏳ |
+| **4** | Rendu client local — PixiJS sprite, contrôle clavier, 1 archer | démo locale jouable solo | ⏳ |
+| **5** | Hot-seat 2-4 archers même clavier | démo locale 2-4 joueurs | ⏳ |
+| **6** | Colyseus state schema + sync naïve | 2 onglets, état partagé | ⏳ |
+| **7** | Client prediction + reconciliation + interpolation | latence ressentie < 100 ms | ⏳ |
+| **8** | Lobby, code de room 4 lettres, écran fin de round/match | match complet 2 joueurs distants | ⏳ |
+| **9** | Coffres + flèches Bomb, Drill, Laser + Shield | mécaniques complètes | ⏳ |
+| **10** | 3 maps designées + intégration assets pixel art CC0 | jeu visuel complet | ⏳ |
+| **11** | SFX + musique CC0 + polish + gamepad + fullscreen | MVP livré | ⏳ |
+
+## Phase 0 — Setup (terminé)
+
+✅ Tout ce qui est fait dans la PR `feat/setup` :
+
+- Repo GitHub initialisé : <https://github.com/SaadBkz/arrowfall>
+- Monorepo pnpm avec 4 packages : `shared`, `engine`, `client`, `server`
+- TypeScript strict (base + per-package configs)
+- Hello world client PixiJS v8 + Vite 8 → **déployé Vercel** : <https://arrowfall-ten.vercel.app>
+- Hello world serveur Colyseus 0.17 + tsx → **déployé Fly.io** (region `cdg`, 256 MB) : <https://arrowfall-server.fly.dev>
+- Tests Vitest sanity sur `engine` (2/2 verts)
+- Lint/format à brancher en Phase 1 (pas critique pour l'instant)
+
+## Dette technique connue (à adresser plus tard)
+
+### 🔴 Mismatch de version Colyseus client/serveur (à régler en Phase 7)
+
+- **Symptôme** : ouvrir le client déployé → la console affichera `[colyseus] connection failed` lors du `joinOrCreate("hello")`.
+- **Cause** : `colyseus` (server) est en **0.17.10** (latest npm), mais `colyseus.js` (client SDK) est en **0.16.22** (latest npm). Les deux n'ont pas le même protocole wire.
+- **Impact actuel** : la **chaîne de déploiement** (Vercel + Fly.io) fonctionne, le serveur répond en HTTP, le client build et se sert correctement. Mais l'établissement d'une room WebSocket échoue.
+- **Résolution prévue en Phase 7** (Colyseus state schema + sync) : soit attendre que `colyseus.js@0.17` soit publié sur npm, soit downgrader proprement le serveur en `colyseus@0.16` avec tous les sub-packages alignés (overrides pnpm + clean reinstall). À ce moment-là on pourra valider la connexion réelle.
+- **Ce que ça ne bloque pas** : Phases 1-6 (engine pur, mouvement, combat, rendu local, hot-seat) — aucun réseau impliqué. On peut tout coder et tester sans toucher au serveur.
+
+### 🟡 Pas encore de lint / format / CI
+
+- ESLint + Prettier à câbler en Phase 1 (pas critique pour les hello-worlds).
+- Pas de GitHub Actions CI pour l'instant — à mettre quand on aura plus de tests.
+
+## Comment piloter la suite
+
+À la fin de cette session de setup, ouvre une nouvelle conversation Claude Code et demande :
+
+> « Donne-moi le prompt #2 — Engine bootstrap (tilemap, math 2D, types partagés, premier test deterministe) ».
+
+Une fois ce prompt exécuté et la PR mergée, enchaîne avec #3, etc. Garde un seul prompt actif à la fois pour bien valider chaque livrable.
