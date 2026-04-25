@@ -1,9 +1,13 @@
+import { type Direction8 } from "../math/direction.js";
+
 // Spec §8.4 — inputs sent at 60 Hz.
-// `jump` and `dodge` are *edges* (true only on the frame the key is pressed,
-// consumed once by the engine). `left/right/up/down/jumpHeld` are *levels*
-// (true while held). The caller (client predicition / server authoritative)
-// is responsible for producing the correct edge vs. level values frame by
-// frame. Phase 2 omits `shoot` and `aimDirection` — those land in Phase 3.
+// `jump`, `dodge` and `shoot` are *edges* (true only on the frame the key is
+// pressed, consumed once by the engine). `left/right/up/down/jumpHeld` are
+// *levels* (true while held). `aimDirection` is the player's held aim, in 8
+// compass directions, independent from walk: null = no aim held (default,
+// shooting fires horizontally toward `facing`). The caller (client
+// prediction / server authoritative) is responsible for producing correct
+// edge vs. level values frame by frame.
 export type ArcherInput = {
   readonly left: boolean;
   readonly right: boolean;
@@ -12,6 +16,8 @@ export type ArcherInput = {
   readonly jump: boolean;
   readonly dodge: boolean;
   readonly jumpHeld: boolean;
+  readonly shoot: boolean;
+  readonly aimDirection: Direction8 | null;
 };
 
 export const NEUTRAL_INPUT: ArcherInput = {
@@ -22,4 +28,6 @@ export const NEUTRAL_INPUT: ArcherInput = {
   jump: false,
   dodge: false,
   jumpHeld: false,
+  shoot: false,
+  aimDirection: null,
 };
