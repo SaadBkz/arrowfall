@@ -37,4 +37,51 @@ for (let i = 0; i < 60; i++) body = stepGravity(body);
 // Au-delà de la frame 14, body.vel.y reste clampé à MAX_FALL_SPEED (4 px/frame).
 ```
 
-La collision tilemap arrive en Phase 2 — `stepGravity` est juste la primitive d'accélération.
+## Archer state machine (Phase 2)
+
+`stepArcher(archer, input, map)` est l'API publique pour avancer l'état d'un archer d'une frame. Pure — ne mute rien, ne touche pas au DOM, ne lit pas l'horloge. La hitbox de l'archer est ancrée par son coin top-left :
+
+```
+   pos.x
+    │
+    ▼
+  ┌────────┐  ← pos.y      (8 px de large × 11 px de haut, spec §2.6)
+  │        │
+  │ archer │
+  │        │
+  │        │
+  └────────┘  ← pos.y + 11
+    │      │
+    ▲      ▲
+    pos.x  pos.x + 8
+```
+
+Ordre d'opérations interne (load-bearing pour le déterminisme) :
+
+1. Sonder l'environnement (`isOnGround`, `isTouchingWall` × 2).
+2. `applyDodge` — peut transitionner `idle` → `dodging` et écraser `vel`.
+3. Si pas en dodge : `applyWalk` → `applyJump` (coyote / buffer / wall-jump) → gravité → `applyFastFall`.
+4. Cache `prevBottom` (= `pos.y + 11`) pour la sémantique JUMPTHRU de la frame.
+5. `moveAndCollide` (sweepX puis sweepY) → annule `vel.x` ou `vel.y` à l'impact.
+6. Décrémentation des timers (coyote/buffer ne décrémentent pas le frame où ils sont rechargés — sinon off-by-one).
+7. `wrapPosition` finale.
+
+```ts
+import { createArcher, parseMap, stepArcher } from "@arrowfall/engine";
+import type { ArcherInput, MapJson } from "@arrowfall/shared";
+import json from "./my-map.json" with { type: "json" };
+
+const map = parseMap(json as MapJson);
+let archer = createArcher("p1", { x: 32, y: 16 });
+
+// Une frame d'input: dodge horizontal vers la droite.
+const input: ArcherInput = {
+  left: false, right: true, up: false, down: false,
+  jump: false, dodge: true, jumpHeld: false,
+};
+
+archer = stepArcher(archer, input, map);
+// → archer.state === 'dodging', vel = (DODGE_SPEED, 0), iframes armés.
+```
+
+`stepGravity` reste exporté pour les corps non-archers (flèches, particules) — Phase 3 s'en sert.
