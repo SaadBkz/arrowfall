@@ -56,6 +56,14 @@ export const stepArcher = (
   input: ArcherInput,
   map: MapData,
 ): Archer => {
+  // 0. Dead archers freeze in place — only deathTimer ticks. The body is
+  //    held in the world for DEATH_DURATION_FRAMES so the renderer can
+  //    play the fragmentation animation; the World aggregate filters it
+  //    out once that timer elapses.
+  if (!archer.alive) {
+    return { ...archer, deathTimer: archer.deathTimer + 1 };
+  }
+
   // 1. Probe the world.
   const startAabb = aabbOf(archer);
   const onGround = isOnGround(map, startAabb);
@@ -107,6 +115,8 @@ export const stepArcher = (
     : Math.max(0, next.jumpBufferTimer - 1);
   const dodgeIframeTimer = Math.max(0, next.dodgeIframeTimer - 1);
   const dodgeCooldownTimer = Math.max(0, next.dodgeCooldownTimer - 1);
+  const shootCooldownTimer = Math.max(0, next.shootCooldownTimer - 1);
+  const spawnIframeTimer = Math.max(0, next.spawnIframeTimer - 1);
 
   // 7. Wrap final position. Position is the only thing that wraps —
   //    velocity and timers are unaffected.
@@ -120,6 +130,8 @@ export const stepArcher = (
     jumpBufferTimer,
     dodgeIframeTimer,
     dodgeCooldownTimer,
+    shootCooldownTimer,
+    spawnIframeTimer,
     prevBottom,
   };
 };

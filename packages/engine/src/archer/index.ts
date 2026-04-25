@@ -3,4 +3,5 @@ export * from "./walk.js";
 export * from "./jump.js";
 export * from "./dodge.js";
 export * from "./fastfall.js";
+export * from "./shoot.js";
 export * from "./step.js";
