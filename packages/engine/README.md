@@ -85,3 +85,70 @@ archer = stepArcher(archer, input, map);
 ```
 
 `stepGravity` reste exporté pour les corps non-archers (flèches, particules) — Phase 3 s'en sert.
+
+## Combat (Phase 3)
+
+`stepWorld(world, inputs)` est le nouvel orchestrateur central — il combine archers, flèches et map en un état pur et exécute un pas de simulation à 60 Hz. Il appelle `applyShoot` puis `stepArcher` puis `stepArrow` puis résout les collisions selon **un ordre canonique trié par id alphabétique** (load-bearing pour le déterminisme client/serveur).
+
+```ts
+import {
+  createWorld,
+  parseMap,
+  stepWorld,
+  type World,
+} from "@arrowfall/engine";
+import { type ArcherInput, NEUTRAL_INPUT, TILE_SIZE } from "@arrowfall/shared";
+import json from "./my-map.json" with { type: "json" };
+
+const map = parseMap(json);
+const spawns = map.spawns.map((s) => ({ x: s.x * TILE_SIZE, y: s.y * TILE_SIZE }));
+let w: World = createWorld(map, spawns, ["p1", "p2"]);
+
+const inputs = new Map<string, ArcherInput>([
+  ["p1", { ...NEUTRAL_INPUT, shoot: true, aimDirection: "E" }],
+  ["p2", NEUTRAL_INPUT],
+]);
+w = stepWorld(w, inputs); // → w.events contains an arrow-fired event for p1.
+```
+
+### Ordre d'itération `stepWorld`
+
+1. Snapshot des ids triés par ordre alphabétique.
+2. `applyShoot` par archer (suffix d'id = `${tick}`).
+3. `stepArcher` par archer (physique + décrément des timers).
+4. `stepArrow` par flèche existante (triée par id).
+5. Résolution arrow ↔ archer : self-friendly-fire ignoré, `spawnIframeTimer > 0` → pass-through, `dodgeIframeTimer > 0` → catch (+1 inv clampé), sinon kill + embed.
+6. Stomp : `A.vel.y > 0` ET `head(B) ∩ body(A)` → B meurt + A rebondit (`STOMP_BOUNCE_VELOCITY`). Iframe spawn/dodge sur B annule le stomp.
+7. Pickup : flèches `grounded`/`embedded` avec `groundedTimer === 0` → `+1` inv, flèche disparaît.
+8. Drop : chaque archer mort cette frame éjecte ses flèches via `dropArrowsOnDeath` (schéma déterministe N angles dans `(-π, 0)`, pas de PRNG).
+9. Despawn des corps avec `deathTimer >= DEATH_DURATION_FRAMES`.
+10. `tick += 1`.
+
+### Hitboxes (spec §2.6)
+
+```
+   pos.x
+    │
+    ▼
+  ┌────────┐  ← pos.y           ╲ tête : 8 × 3 px (top), cible du stomp
+  │ tête   │  ← pos.y + 3       ╱
+  │        │
+  │ corps  │                     corps : 8 × 11 px (hitbox principale)
+  │        │
+  │        │
+  └────────┘  ← pos.y + 11
+    8 px
+
+  ┌────────┐  ← arrow.pos.y     flèche : 8 × 2 px
+  │ flèche │
+  └────────┘  ← arrow.pos.y + 2
+```
+
+La hitbox tête est juste le sous-AABB des 3 px supérieurs du corps — pas un type séparé. Le résolveur stomp la fabrique à la volée dans `stepWorld`. La flèche partage la convention top-left, ignore JUMPTHRU et SPIKE pour cette phase, et plante (`embedded`) ou se pose (`grounded`) sur le premier SOLID rencontré, avec un cooldown de 10 frames avant pickup.
+
+### Démo headless
+
+```bash
+pnpm demo:combat
+# → 600 frames de trace : tick=N | p1: pos=(x,y) inv=I alive=Y/N | p2: ... | events=[...]
+```
