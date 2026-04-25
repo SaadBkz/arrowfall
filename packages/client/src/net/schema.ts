@@ -10,20 +10,43 @@ import { ArraySchema, MapSchema, Schema, defineTypes } from "@colyseus/schema";
 // a no-dep package by contract. Pulling @colyseus/schema into shared
 // would leak networking into engine + tests. The cost of duplication is
 // ~30 lines that change once a phase.
+//
+// `declare` keyword (not `!`) — under `useDefineForClassFields: true`
+// (TS default for ES2022 targets) even definite-assignment field
+// declarations emit Object.defineProperty calls that shadow the
+// prototype getters/setters @colyseus/schema installs. Constructor-body
+// assignments then bypass the schema's change tracking. `declare`
+// emits no class field, so the prototype accessors stay intact.
 
 export class ArcherState extends Schema {
-  id = "";
-  posX = 0;
-  posY = 0;
-  velX = 0;
-  velY = 0;
-  facing = "R";
-  state = "idle";
-  inventory = 0;
-  alive = true;
-  deathTimer = 0;
-  spawnIframeTimer = 0;
-  dodgeIframeTimer = 0;
+  declare id: string;
+  declare posX: number;
+  declare posY: number;
+  declare velX: number;
+  declare velY: number;
+  declare facing: string;
+  declare state: string;
+  declare inventory: number;
+  declare alive: boolean;
+  declare deathTimer: number;
+  declare spawnIframeTimer: number;
+  declare dodgeIframeTimer: number;
+
+  constructor() {
+    super();
+    this.id = "";
+    this.posX = 0;
+    this.posY = 0;
+    this.velX = 0;
+    this.velY = 0;
+    this.facing = "R";
+    this.state = "idle";
+    this.inventory = 0;
+    this.alive = true;
+    this.deathTimer = 0;
+    this.spawnIframeTimer = 0;
+    this.dodgeIframeTimer = 0;
+  }
 }
 
 defineTypes(ArcherState, {
@@ -42,14 +65,26 @@ defineTypes(ArcherState, {
 });
 
 export class ArrowState extends Schema {
-  id = "";
-  posX = 0;
-  posY = 0;
-  velX = 0;
-  velY = 0;
-  ownerId = "";
-  status = "flying";
-  groundedTimer = 0;
+  declare id: string;
+  declare posX: number;
+  declare posY: number;
+  declare velX: number;
+  declare velY: number;
+  declare ownerId: string;
+  declare status: string;
+  declare groundedTimer: number;
+
+  constructor() {
+    super();
+    this.id = "";
+    this.posX = 0;
+    this.posY = 0;
+    this.velX = 0;
+    this.velY = 0;
+    this.ownerId = "";
+    this.status = "flying";
+    this.groundedTimer = 0;
+  }
 }
 
 defineTypes(ArrowState, {
@@ -64,10 +99,18 @@ defineTypes(ArrowState, {
 });
 
 export class MatchState extends Schema {
-  tick = 0;
-  mapId = "";
-  archers = new MapSchema<ArcherState>();
-  arrows = new ArraySchema<ArrowState>();
+  declare tick: number;
+  declare mapId: string;
+  declare archers: MapSchema<ArcherState>;
+  declare arrows: ArraySchema<ArrowState>;
+
+  constructor() {
+    super();
+    this.tick = 0;
+    this.mapId = "";
+    this.archers = new MapSchema<ArcherState>();
+    this.arrows = new ArraySchema<ArrowState>();
+  }
 }
 
 defineTypes(MatchState, {

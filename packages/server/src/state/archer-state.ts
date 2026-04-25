@@ -10,19 +10,47 @@ import { Schema, defineTypes } from "@colyseus/schema";
 // because @colyseus/schema 3.x only patches @type-decorated structures
 // efficiently. A nested non-Schema object would force a full re-emit on
 // every change.
+//
+// IMPORTANT — `declare` (NOT `!`):
+// Under `useDefineForClassFields: true` (TS default for ES2022 targets),
+// even a definite-assignment field (`field!: T;`) compiles to
+// `Object.defineProperty(this, 'field', {value: undefined, writable: true})`
+// at instance construction. That OVERRIDES the prototype getter/setter
+// @colyseus/schema installs via `Schema.initialize` — so `~childType`
+// never propagates to MapSchema/ArraySchema and encodeAll throws
+// `Cannot read properties of undefined`.
+// `declare` tells TS the field exists at runtime but emits NO class
+// field — the prototype's accessors stay intact and constructor-body
+// assignments fire the setters correctly.
 export class ArcherState extends Schema {
-  id = "";
-  posX = 0;
-  posY = 0;
-  velX = 0;
-  velY = 0;
-  facing = "R"; // "L" | "R"
-  state = "idle"; // "idle" | "dodging"
-  inventory = 0;
-  alive = true;
-  deathTimer = 0;
-  spawnIframeTimer = 0;
-  dodgeIframeTimer = 0;
+  declare id: string;
+  declare posX: number;
+  declare posY: number;
+  declare velX: number;
+  declare velY: number;
+  declare facing: string; // "L" | "R"
+  declare state: string; // "idle" | "dodging"
+  declare inventory: number;
+  declare alive: boolean;
+  declare deathTimer: number;
+  declare spawnIframeTimer: number;
+  declare dodgeIframeTimer: number;
+
+  constructor() {
+    super();
+    this.id = "";
+    this.posX = 0;
+    this.posY = 0;
+    this.velX = 0;
+    this.velY = 0;
+    this.facing = "R";
+    this.state = "idle";
+    this.inventory = 0;
+    this.alive = true;
+    this.deathTimer = 0;
+    this.spawnIframeTimer = 0;
+    this.dodgeIframeTimer = 0;
+  }
 }
 
 defineTypes(ArcherState, {
