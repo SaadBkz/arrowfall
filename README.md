@@ -85,6 +85,18 @@ L'archer est une state machine pure (`idle` ↔ `dodging`) implémentée dans [`
 pnpm --filter @arrowfall/engine test
 ```
 
+## Phase 3 — Combat
+
+La couche combat ajoute la flèche normale, le tir avec inventaire, la mort à un coup, le catch pendant un dodge, le stomp sur la tête, le pickup au sol et le drop d'arrows à la mort. Tout est orchestré par un nouveau `stepWorld(world, inputs)` (dans [`packages/engine/src/world/`](./packages/engine/src/world/)) qui agrège archers + flèches + map en un état pur, avec un ordre d'itération canonique (tri alphabétique par id partout) — exigence dure pour le déterminisme client/serveur. Aucun PRNG : le drop d'arrows utilise un schéma à N angles fixes dans le demi-cercle haut. La suite Vitest couvre chaque mécanique séparément + un scénario pivot 600 frames bit-identique sur deux runs parallèles (positions, vélocités, inventaires, timers, et la liste d'events).
+
+```bash
+# Suite engine (125 tests, ~1.3 s)
+pnpm --filter @arrowfall/engine test
+
+# Démo headless 2 archers, 600 frames, trace lisible
+pnpm demo:combat
+```
+
 ## Déployer
 
 ### Front sur Vercel

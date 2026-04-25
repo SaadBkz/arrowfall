@@ -9,7 +9,7 @@
 | **0** | Setup (ce prompt #1) | hello world déployé front + back | ✅ |
 | **1** | Bootstrap engine — tilemap loader, types partagés, math 2D | tests Vitest verts sur `engine` | ✅ |
 | **2** | Mouvement archer — gravité, marche, saut, dodge, wall-jump, wrap | suite de tests deterministes du `engine` | ✅ |
-| **3** | Combat — flèches normales, tir, ramassage, stomp, catch, mort | tests + démo headless | ⏳ |
+| **3** | Combat — flèches normales, tir, ramassage, stomp, catch, mort | tests + démo headless | ✅ |
 | **4** | Rendu client local — PixiJS sprite, contrôle clavier, 1 archer | démo locale jouable solo | ⏳ |
 | **5** | Hot-seat 2-4 archers même clavier | démo locale 2-4 joueurs | ⏳ |
 | **6** | Colyseus state schema + sync naïve | 2 onglets, état partagé | ⏳ |
@@ -18,6 +18,19 @@
 | **9** | Coffres + flèches Bomb, Drill, Laser + Shield | mécaniques complètes | ⏳ |
 | **10** | 3 maps designées + intégration assets pixel art CC0 | jeu visuel complet | ⏳ |
 | **11** | SFX + musique CC0 + polish + gamepad + fullscreen | MVP livré | ⏳ |
+
+## Phase 3 — Combat (terminé)
+
+✅ Livrée dans la PR `feat/combat-arrows` : <https://github.com/SaadBkz/arrowfall/pull/4>
+
+- `@arrowfall/shared` : `ArcherInput` étendu (`shoot` edge + `aimDirection: Direction8 | null`), helper `aimVector(input, facing)`, constantes Phase 3 (`SHOOT_COOLDOWN_FRAMES=8`, `ARROW_SPEED=5`, `MAX_INVENTORY=5`, `SPAWN_ARROW_COUNT=3`, `SPAWN_IFRAME_FRAMES=60`, `DEATH_DURATION_FRAMES=30`, `ARROW_GROUNDED_PICKUP_DELAY=10`, `HEAD_HITBOX_H=3`).
+- `@arrowfall/engine/arrow` : `Arrow` (hitbox 8×2, statuts `flying`/`grounded`/`embedded`), `stepArrow` semi-implicit Euler clampé à `MAX_FALL_SPEED`, sweep SOLID-only (JUMPTHRU/SPIKE passables), wrap au seam, distinction floor-landing (`grounded`) vs wall-impact (`embedded`). `dropArrowsOnDeath` éjecte N flèches selon un schéma déterministe à N angles également espacés dans `(-π, 0)` — pas de PRNG.
+- `@arrowfall/engine/archer` : `Archer` étendu (`inventory`, `shootCooldownTimer`, `alive`, `deathTimer`, `spawnIframeTimer`), `applyShoot` séparé (retourne `{ archer, newArrow }`), `stepArcher` court-circuite `!alive` et décrémente les nouveaux timers.
+- `@arrowfall/engine/world` : `World = { map, archers, arrows, tick, events }` avec `stepWorld(world, inputs)` qui orchestre l'ordre canonique (shoot → step archers → step arrows → arrow/archer → stomp → pickup → drop on death → despawn corpses → tick++). Tri par id partout, hitbox tête = top 3 px, `WorldEvent` union (`arrow-fired`/`arrow-caught`/`archer-killed`/`arrow-picked-up`).
+- 125 tests Vitest (< 1.5 s) dont le pivot **600 frames bit-identiques sur deux runs parallèles** (tolérance 0 sur pos/vel/inventaires/timers/events).
+- Démo headless `pnpm demo:combat` (`scripts/demo-combat.ts`).
+
+Note : SPIKE ↔ archer est laissé non-bloquant (comportement Phase 2). La cause `'spike'` existe dans `WorldEvent` pour que la Phase 4 le câble sans bump de schéma.
 
 ## Phase 2 — Mouvement archer (terminé)
 

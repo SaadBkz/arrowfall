@@ -46,7 +46,17 @@ const inputAt = (f: number): ArcherInput => {
   const jump = f === 100 || f === 220 || f === 320;
   const dodge = f === 130 || f === 230;
   const jumpHeld = false;
-  return { left, right, up, down, jump, dodge, jumpHeld };
+  return {
+    left,
+    right,
+    up,
+    down,
+    jump,
+    dodge,
+    jumpHeld,
+    shoot: false,
+    aimDirection: null,
+  };
 };
 
 const runScenario = (frames: number): Archer[] => {

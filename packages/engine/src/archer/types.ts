@@ -1,4 +1,8 @@
-import { type Vec2 } from "@arrowfall/shared";
+import {
+  SPAWN_ARROW_COUNT,
+  SPAWN_IFRAME_FRAMES,
+  type Vec2,
+} from "@arrowfall/shared";
 import { HITBOX_H, HITBOX_W } from "../physics/collide.js";
 
 export type ArcherState = "idle" | "dodging";
@@ -19,6 +23,13 @@ export type Archer = {
   // Cached previous-frame bottom edge for the JUMPTHRU semantics — see
   // collide.ts. Reset every step from pos.y + HITBOX_H.
   readonly prevBottom: number;
+  // Phase 3 — combat / lifecycle.
+  readonly inventory: number; // arrows held (0..MAX_INVENTORY); spawn = SPAWN_ARROW_COUNT
+  readonly shootCooldownTimer: number; // > 0 blocks new shots
+  readonly alive: boolean; // false after a lethal hit
+  readonly deathTimer: number; // frames since death; client uses this for the
+  // fragmentation animation, world uses it to despawn after DEATH_DURATION_FRAMES
+  readonly spawnIframeTimer: number; // > 0 → arrows pass through, stomp ignored
 };
 
 export const createArcher = (
@@ -37,6 +48,11 @@ export const createArcher = (
   coyoteTimer: 0,
   jumpBufferTimer: 0,
   prevBottom: spawn.y + HITBOX_H,
+  inventory: SPAWN_ARROW_COUNT,
+  shootCooldownTimer: 0,
+  alive: true,
+  deathTimer: 0,
+  spawnIframeTimer: SPAWN_IFRAME_FRAMES,
 });
 
 // Re-exported so callers can build their own AABB from an Archer without

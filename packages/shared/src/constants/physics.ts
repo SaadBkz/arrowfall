@@ -29,3 +29,23 @@ export const DODGE_CATCH_WINDOW_FRAMES = 12; // arrow contact during this window
 
 // §2.5 Stomp
 export const STOMP_BOUNCE_VELOCITY = -3.5; // upward bounce after a successful head-stomp
+
+// §2.6 Hitboxes — head sub-AABB used for stomp detection (top 3 px of the
+// 8×11 body). Phase 3 surfaces this constant so both the engine resolver and
+// any tooling/renderer share the same value.
+export const HEAD_HITBOX_H = 3;
+
+// §3.1 Inventory
+export const SPAWN_ARROW_COUNT = 3;
+export const MAX_INVENTORY = 5;
+
+// §3.2 Lifecycle
+export const SPAWN_IFRAME_FRAMES = 60; // 1 s of post-spawn invincibility
+export const DEATH_DURATION_FRAMES = 30; // body lingers this long before despawn
+
+// §4.1 Shoot mechanic — Normal arrow only in Phase 3.
+export const SHOOT_COOLDOWN_FRAMES = 8;
+export const ARROW_GROUNDED_PICKUP_DELAY = 10; // grace after landing before pickup is allowed
+
+// §4.2 Arrow physics — Normal arrow.
+export const ARROW_SPEED = 5.0; // px/frame (initial muzzle speed)
