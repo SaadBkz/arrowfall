@@ -21,7 +21,7 @@
 
 ## Phase 1 — Engine bootstrap (terminé)
 
-✅ Livrée dans la PR `feat/engine-bootstrap` : <PR-URL-PLACEHOLDER>
+✅ Livrée dans la PR `feat/engine-bootstrap` : <https://github.com/SaadBkz/arrowfall/pull/2>
 
 - ESLint flat config + Prettier au niveau racine, scripts `pnpm lint` / `pnpm format`.
 - `tsconfig.base.json` durci : `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`.
