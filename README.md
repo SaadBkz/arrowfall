@@ -103,23 +103,30 @@ Le hello-world Phase 0 a été remplacé par un client PixiJS solo jouable. Tout
 
 ```bash
 pnpm --filter @arrowfall/client dev    # http://localhost:5173
-pnpm --filter @arrowfall/client build  # bundle Vite, ≤ 250 KB gzippé
+pnpm --filter @arrowfall/client build  # bundle Vite
 ```
 
-### Contrôles clavier (priorité flèches — AZERTY-friendly)
+## Phase 5 — Hot-seat 2-4 archers
 
-| Action | Touche primaire | Alternative |
+Le client supporte maintenant 2 à 4 joueurs sur le même clavier. La constante `PLAYER_COUNT` en tête de [`packages/client/src/game/index.ts`](./packages/client/src/game/index.ts) bascule entre `arena-01` (2P par défaut) et `arena-02` (4 spawns en quinconce). Détection de fin de round + message « PX wins! » / « Draw! » centré, reset par `Backspace`. Aucune modif moteur (multi-archers déjà câblé Phase 3). Vitest minimal côté client : `getRoundOutcome` + validation des fixtures de map.
+
+### Contrôles clavier (hot-seat)
+
+Les bindings utilisent `event.code` (layout-independent — `KeyA` = position physique « A » sur QWERTY = « Q » sur AZERTY, donc `KeyW`/`KeyA`/`KeyS`/`KeyD` correspond visuellement à ZQSD sur AZERTY).
+
+| Action | P1 (rouge) | P2 (bleu) |
 |---|---|---|
-| Aller à gauche | `←` | `A` / `Q` |
-| Aller à droite | `→` | `D` |
-| Viser haut | `↑` | `W` / `Z` |
-| Viser bas / fast-fall | `↓` | `S` |
-| Saut | `Espace` | — |
-| Tirer | `J` | — |
-| Esquive (dodge) | `K` | — |
-| Reset du round | `R` | — |
+| Gauche / Droite | `←` / `→` | `A` / `D` (= Q / D AZERTY) |
+| Haut | `↑` | `W` (= Z AZERTY) |
+| Bas / fast-fall | `↓` | `S` |
+| Saut | `Espace` | `F` |
+| Tirer | `J` | `R` |
+| Dodge | `K` | `T` |
 
-Tirer sans direction = horizontal vers le facing de l'archer ; combiner directions + `J` = visée 8 directions. La fenêtre d'iframe du dodge sert aussi à catch les flèches (rappel spec §2.4). Les flèches qui sortent par la droite réapparaissent à gauche (wrap continu, spec §5.2).
+| Reset (global) | `Backspace` |
+|---|---|
+
+P3 (vert) et P4 (jaune) sont câblés (Numpad et `[ ] ; ' / \ .`) mais **non validés ergonomiquement** : au-delà de 2 joueurs, les claviers physiques ont du **N-key rollover** limité (anti-ghost matrices) — plusieurs touches simultanées peuvent être ignorées. Les manettes en Phase 11 résoudront ce problème proprement. Tirer sans direction = horizontal vers le facing de l'archer ; combiner directions + tir = visée 8 directions (rappel spec §4.1). La fenêtre d'iframe du dodge sert aussi à catch les flèches (rappel spec §2.4). Les flèches qui sortent par la droite réapparaissent à gauche (wrap continu, spec §5.2).
 
 ## Déployer
 

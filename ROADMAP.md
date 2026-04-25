@@ -11,13 +11,27 @@
 | **2** | Mouvement archer — gravité, marche, saut, dodge, wall-jump, wrap | suite de tests deterministes du `engine` | ✅ |
 | **3** | Combat — flèches normales, tir, ramassage, stomp, catch, mort | tests + démo headless | ✅ |
 | **4** | Rendu client local — PixiJS sprite, contrôle clavier, 1 archer | démo locale jouable solo | ✅ |
-| **5** | Hot-seat 2-4 archers même clavier | démo locale 2-4 joueurs | ⏳ |
+| **5** | Hot-seat 2-4 archers même clavier | démo locale 2-4 joueurs | ✅ |
 | **6** | Colyseus state schema + sync naïve | 2 onglets, état partagé | ⏳ |
 | **7** | Client prediction + reconciliation + interpolation | latence ressentie < 100 ms | ⏳ |
 | **8** | Lobby, code de room 4 lettres, écran fin de round/match | match complet 2 joueurs distants | ⏳ |
 | **9** | Coffres + flèches Bomb, Drill, Laser + Shield | mécaniques complètes | ⏳ |
 | **10** | 3 maps designées + intégration assets pixel art CC0 | jeu visuel complet | ⏳ |
 | **11** | SFX + musique CC0 + polish + gamepad + fullscreen | MVP livré | ⏳ |
+
+## Phase 5 — Hot-seat 2-4 archers (terminé)
+
+✅ Livrée dans la PR `feat/hot-seat` : <https://github.com/SaadBkz/arrowfall/pull/6>
+
+- `@arrowfall/client/game/input.ts` réécrit en mapper N joueurs : une `KeyboardInput` unique maintient un `Map<playerId, KeyState>` et expose `snapshot(playerId)` / `consumeEdges(playerId)` ; `PLAYER_BINDINGS` data-driven (4 slots p1..p4 prêts) ; `consumeReset()` reste un edge global. Les `preventDefault` codes sont dérivés des bindings actifs (au-delà des 6 toujours bloqués : flèches/Espace/Backspace).
+- **Conflit `KeyR`** (P1 reset vs P2 shoot) résolu en migrant le reset global vers `Backspace` — accessible à tous, sans collision avec les rangées P2 (FRT) ni P1 (J/K). Documenté README + ce ROADMAP.
+- `game/round-state.ts` pur (`getRoundOutcome(world)` → `ongoing | win | draw`). Freeze policy : on flippe dès que ≤ 1 archer `alive=true`, sans attendre `DEATH_DURATION_FRAMES` — le winner est décidé à la frame de l'impact, la fragmentation est cosmétique. Vitest (5 cas).
+- `game/render/round-message.ts` : Text PixiJS centré (logical 240×135), tinté à la couleur du slot du gagnant. Visible jusqu'au reset.
+- `game/index.ts` : constante `PLAYER_COUNT = 2` (autorisée 1..4), bascule automatique de map (`arena-01` ≤ 2P, `arena-02` ≥ 3P), `Map<id, ArcherInput>` peuplée via `playerIds`, `consumeEdges(id)` pour chaque joueur après `stepWorld`.
+- `maps/arena-02.json` : 30×17, 4 spawns en quinconce (un par quadrant), JUMPTHRU centrale 12 tiles + 2 jumpthrus latéraux + spike décoratif row 15.
+- HUD multi-archers : 1 ligne par joueur, nom tinté à la couleur du corps via `archerColorFor`, footer (arrows count / fps / `[Backspace] reset`). Plus aucun débordement à 4P (7 lignes × 10 px = 70 px ≪ 270 px).
+- Vitest configuré dans `@arrowfall/client` (script `test`) — `round-state.test.ts` (5 cas) + `maps.test.ts` (parse + 4 spawns en quinconce). 7 verts, ~480 ms. Engine reste 125/125, aucune régression.
+- README racine + `packages/client/README.md` + ROADMAP à jour avec tableau des contrôles P1/P2 et caveat ghosting clavier > 2 joueurs (gamepads en Phase 11).
 
 ## Phase 4 — Rendu client local (terminé)
 
