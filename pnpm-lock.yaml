@@ -47,6 +47,12 @@ importers:
 
   packages/client:
     dependencies:
+      '@arrowfall/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@arrowfall/shared':
+        specifier: workspace:*
+        version: link:../shared
       colyseus.js:
         specifier: ^0.16.22
         version: 0.16.22
