@@ -21,7 +21,7 @@
 
 ## Phase 2 — Mouvement archer (terminé)
 
-✅ Livrée dans la PR `feat/archer-movement` : _<lien à backfill après ouverture>_
+✅ Livrée dans la PR `feat/archer-movement` : <https://github.com/SaadBkz/arrowfall/pull/3>
 
 - `@arrowfall/shared` : `ArcherInput` (edges `jump`/`dodge`, levels `left`/`right`/`up`/`down`/`jumpHeld`) + `inputDirection()` qui mappe les 4 dpad vers `Direction8`.
 - `@arrowfall/engine/physics/collide` : sweep axis-separated (`sweepX`/`sweepY`/`moveAndCollide`) + probes `isOnGround`/`isTouchingWall`, sémantique JUMPTHRU avec `prevBottom`, hitbox 8×11, wrap-aware via `tileAt`.
