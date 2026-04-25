@@ -97,6 +97,30 @@ pnpm --filter @arrowfall/engine test
 pnpm demo:combat
 ```
 
+## Phase 4 — Rendu client local
+
+Le hello-world Phase 0 a été remplacé par un client PixiJS solo jouable. Tout passe par l'engine (`stepWorld` à 60 Hz) — le client ne fait que rendu + capture clavier + boucle de jeu. Pas de réseau dans cette phase. Voir [`packages/client/README.md`](./packages/client/README.md) pour l'architecture du dossier.
+
+```bash
+pnpm --filter @arrowfall/client dev    # http://localhost:5173
+pnpm --filter @arrowfall/client build  # bundle Vite, ≤ 250 KB gzippé
+```
+
+### Contrôles clavier (priorité flèches — AZERTY-friendly)
+
+| Action | Touche primaire | Alternative |
+|---|---|---|
+| Aller à gauche | `←` | `A` / `Q` |
+| Aller à droite | `→` | `D` |
+| Viser haut | `↑` | `W` / `Z` |
+| Viser bas / fast-fall | `↓` | `S` |
+| Saut | `Espace` | — |
+| Tirer | `J` | — |
+| Esquive (dodge) | `K` | — |
+| Reset du round | `R` | — |
+
+Tirer sans direction = horizontal vers le facing de l'archer ; combiner directions + `J` = visée 8 directions. La fenêtre d'iframe du dodge sert aussi à catch les flèches (rappel spec §2.4). Les flèches qui sortent par la droite réapparaissent à gauche (wrap continu, spec §5.2).
+
 ## Déployer
 
 ### Front sur Vercel

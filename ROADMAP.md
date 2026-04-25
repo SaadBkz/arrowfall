@@ -10,7 +10,7 @@
 | **1** | Bootstrap engine — tilemap loader, types partagés, math 2D | tests Vitest verts sur `engine` | ✅ |
 | **2** | Mouvement archer — gravité, marche, saut, dodge, wall-jump, wrap | suite de tests deterministes du `engine` | ✅ |
 | **3** | Combat — flèches normales, tir, ramassage, stomp, catch, mort | tests + démo headless | ✅ |
-| **4** | Rendu client local — PixiJS sprite, contrôle clavier, 1 archer | démo locale jouable solo | ⏳ |
+| **4** | Rendu client local — PixiJS sprite, contrôle clavier, 1 archer | démo locale jouable solo | ✅ |
 | **5** | Hot-seat 2-4 archers même clavier | démo locale 2-4 joueurs | ⏳ |
 | **6** | Colyseus state schema + sync naïve | 2 onglets, état partagé | ⏳ |
 | **7** | Client prediction + reconciliation + interpolation | latence ressentie < 100 ms | ⏳ |
@@ -18,6 +18,17 @@
 | **9** | Coffres + flèches Bomb, Drill, Laser + Shield | mécaniques complètes | ⏳ |
 | **10** | 3 maps designées + intégration assets pixel art CC0 | jeu visuel complet | ⏳ |
 | **11** | SFX + musique CC0 + polish + gamepad + fullscreen | MVP livré | ⏳ |
+
+## Phase 4 — Rendu client local (terminé)
+
+✅ Livrée dans la PR `feat/client-render` : <PR_URL_PLACEHOLDER>
+
+- `@arrowfall/client` repensé : entry `main.ts` boote PixiJS v8 (antialias off, canvas crisp), une `class Game` orchestre l'app, et la simulation passe exclusivement par `stepWorld` de `@arrowfall/engine` — zéro logique de jeu côté client.
+- Boucle de jeu **fixed-timestep accumulator** (`game/loop.ts`) : 60 Hz logique, framerate render variable (jusqu'à 144 Hz). Plafond de 5 ticks par frame contre le spiral of death après alt-tab/freeze.
+- Mapper clavier (`game/input.ts`) avec distinction *edges* (jump/shoot/dodge — true 1 frame, acquittés par `consumeEdges()` après chaque step) vs *levels* (left/right/up/down/jumpHeld — true tant que tenu). Bindings basés sur `event.code` (layout-independent) avec priorité aux flèches pour AZERTY. Reset complet à `window.blur` (anti touche bloquée). `aimDirection` calculé via `inputDirection()` partagé.
+- Rendu Graphics PixiJS uniquement (pas d'assets — Phase 10) en coordonnées logiques 480×270, scaled à l'entier le plus grand qui tient dans la fenêtre, lettrage centré : `tilemap.ts` (one-shot bake static), `archer.ts` (corps 8×11 + tête 8×3 lighter + pixel facing), `arrow.ts` (rect 8×2 rotated par `atan2(vy, vx)` pour les flying), `hud.ts` (Text top-left avec inventaire/alive/fps + `[R] reset`).
+- Map jouable `arena-01.json` copiée du fixture engine, hot-reloadable via touche **R** (recrée le World à zéro).
+- Engine 125/125 verts, aucune régression. Build Vite ≤ 250 KB gzippé total. Vercel auto-déploie au merge sur main.
 
 ## Phase 3 — Combat (terminé)
 
