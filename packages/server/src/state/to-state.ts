@@ -11,25 +11,35 @@ import type { MatchState } from "./match-state.js";
 // Why mutate instead of returning a fresh state: @colyseus/schema tracks
 // changes by object identity. Allocating a new ArcherState every frame
 // would re-emit the full payload (and gradually leak ids on the client).
-export const worldToMatchState = (world: World, state: MatchState): void => {
+//
+// `archerIdBySessionId` maps the room's session ids to engine archer
+// slot ids (p1..p6). state.archers is keyed by sessionId — that lets a
+// connected client look itself up via `room.sessionId` immediately.
+// archer.id (the slot) stays in the schema for HUD color/role mapping.
+export const worldToMatchState = (
+  world: World,
+  state: MatchState,
+  archerIdBySessionId: ReadonlyMap<string, string>,
+): void => {
   state.tick = world.tick;
   if (state.mapId !== world.map.id) {
     state.mapId = world.map.id;
   }
 
-  // Archers: upsert by id, then prune entries no longer in world.
-  // Iteration order doesn't matter for the wire output (the schema only
-  // tracks per-key diffs), but we keep alphabetical to match the engine.
-  const seenArchers = new Set<string>();
-  const sortedArcherIds = [...world.archers.keys()].sort();
-  for (const id of sortedArcherIds) {
-    const archer = world.archers.get(id)!;
-    let s = state.archers.get(id);
+  // Archers: upsert by sessionId, then prune entries that no longer
+  // map to a connected session. Iteration order is arbitrary — the
+  // schema tracks per-key diffs.
+  const seenSessions = new Set<string>();
+  for (const [sessionId, archerId] of archerIdBySessionId) {
+    const archer = world.archers.get(archerId);
+    if (archer === undefined) continue; // stale mapping; skip defensively
+    let s = state.archers.get(sessionId);
     if (s === undefined) {
       s = new ArcherState();
-      s.id = id;
-      state.archers.set(id, s);
+      s.id = archerId;
+      state.archers.set(sessionId, s);
     }
+    s.id = archerId;
     s.posX = archer.pos.x;
     s.posY = archer.pos.y;
     s.velX = archer.vel.x;
@@ -41,10 +51,10 @@ export const worldToMatchState = (world: World, state: MatchState): void => {
     s.deathTimer = archer.deathTimer;
     s.spawnIframeTimer = archer.spawnIframeTimer;
     s.dodgeIframeTimer = archer.dodgeIframeTimer;
-    seenArchers.add(id);
+    seenSessions.add(sessionId);
   }
-  for (const id of [...state.archers.keys()]) {
-    if (!seenArchers.has(id)) state.archers.delete(id);
+  for (const sessionId of [...state.archers.keys()]) {
+    if (!seenSessions.has(sessionId)) state.archers.delete(sessionId);
   }
 
   // Arrows: index existing by id, upsert / prune. Splice-from-tail keeps

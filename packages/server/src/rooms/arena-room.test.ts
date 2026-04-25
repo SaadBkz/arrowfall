@@ -118,11 +118,15 @@ describe("ArenaRoom", () => {
     expect(room.getWorldForTest().archers.size).toBe(0);
   });
 
-  it("MatchState mirrors archers after onJoin", () => {
+  it("MatchState mirrors archers keyed by sessionId after onJoin", () => {
     const room = setup();
-    room.onJoin(fakeClient("a"), {});
+    room.onJoin(fakeClient("session-1"), {});
     expect(room.state.archers.size).toBe(1);
-    expect(room.state.archers.has("p1")).toBe(true);
+    // Schema is keyed by sessionId so a connected client can find
+    // itself with `state.archers.get(room.sessionId)`.
+    expect(room.state.archers.has("session-1")).toBe(true);
+    // The slot id (p1..p6) lives inside ArcherState.id for HUD/role mapping.
+    expect(room.state.archers.get("session-1")!.id).toBe("p1");
   });
 
   it("simulate increments tick on each call", () => {
