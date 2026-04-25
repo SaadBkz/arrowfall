@@ -59,7 +59,23 @@ pnpm test
 
 # Typecheck tous les packages
 pnpm typecheck
+
+# Lint + format (Phase 1)
+pnpm lint
+pnpm format        # rewrite, ou:
+pnpm format:check  # check seul
 ```
+
+## Phase 1 — Engine
+
+Le package `engine` est la simulation **pure** (pas de DOM, pas de réseau, pas de Node-only). Il importe uniquement `@arrowfall/shared` pour les constantes et helpers.
+
+```bash
+# Lance la suite Vitest de l'engine
+pnpm --filter @arrowfall/engine test
+```
+
+La suite couvre la math 2D (`Vec2`, `AABB`, `Direction8`), le loader tilemap (parse/serialize round-trip + erreurs avec ligne/colonne), les utilitaires de grille wrap-aware (480×270), et un test déterministe pivot de la gravité (deux runs parallèles bit-identiques sur 200 frames).
 
 ## Déployer
 

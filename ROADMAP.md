@@ -7,7 +7,7 @@
 | Phase | Objectif | Livrable testable | Statut |
 |---|---|---|---|
 | **0** | Setup (ce prompt #1) | hello world déployé front + back | ✅ |
-| **1** | Bootstrap engine — tilemap loader, types partagés, math 2D | tests Vitest verts sur `engine` | ⏳ |
+| **1** | Bootstrap engine — tilemap loader, types partagés, math 2D | tests Vitest verts sur `engine` | ✅ |
 | **2** | Mouvement archer — gravité, marche, saut, dodge, wall-jump, wrap | suite de tests deterministes du `engine` | ⏳ |
 | **3** | Combat — flèches normales, tir, ramassage, stomp, catch, mort | tests + démo headless | ⏳ |
 | **4** | Rendu client local — PixiJS sprite, contrôle clavier, 1 archer | démo locale jouable solo | ⏳ |
@@ -18,6 +18,16 @@
 | **9** | Coffres + flèches Bomb, Drill, Laser + Shield | mécaniques complètes | ⏳ |
 | **10** | 3 maps designées + intégration assets pixel art CC0 | jeu visuel complet | ⏳ |
 | **11** | SFX + musique CC0 + polish + gamepad + fullscreen | MVP livré | ⏳ |
+
+## Phase 1 — Engine bootstrap (terminé)
+
+✅ Livrée dans la PR `feat/engine-bootstrap` : <https://github.com/SaadBkz/arrowfall/pull/2>
+
+- ESLint flat config + Prettier au niveau racine, scripts `pnpm lint` / `pnpm format`.
+- `tsconfig.base.json` durci : `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`.
+- `@arrowfall/shared` : `Vec2`, `AABB`, helpers scalaires, `Direction8`, types tilemap (`MapData`, `MapJson`, mapping ASCII bijectif), constantes physiques (spec §2) et monde.
+- `@arrowfall/engine` : tilemap loader (`parseMap` / `serializeMap`, validateur main-écrit), util grille wrap-aware (`tileAt`, `worldToTile`, `tileToWorld`, `wrapPosition`), `stepGravity` pur. Aucune dépendance externe hors `@arrowfall/shared`.
+- 41 tests Vitest verts dont le test pivot **déterministe** de la gravité (deux runs parallèles bit-identiques sur 200 frames, table de valeurs calculée à la main jusqu'à la vélocité terminale).
 
 ## Phase 0 — Setup (terminé)
 
@@ -41,9 +51,9 @@
 - **Résolution prévue en Phase 7** (Colyseus state schema + sync) : soit attendre que `colyseus.js@0.17` soit publié sur npm, soit downgrader proprement le serveur en `colyseus@0.16` avec tous les sub-packages alignés (overrides pnpm + clean reinstall). À ce moment-là on pourra valider la connexion réelle.
 - **Ce que ça ne bloque pas** : Phases 1-6 (engine pur, mouvement, combat, rendu local, hot-seat) — aucun réseau impliqué. On peut tout coder et tester sans toucher au serveur.
 
-### 🟡 Pas encore de lint / format / CI
+### 🟡 Pas encore de CI
 
-- ESLint + Prettier à câbler en Phase 1 (pas critique pour les hello-worlds).
+- ESLint + Prettier ✅ branchés en Phase 1.
 - Pas de GitHub Actions CI pour l'instant — à mettre quand on aura plus de tests.
 
 ## Comment piloter la suite
