@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
-import { Server, Room, WebSocketTransport, type Client } from "colyseus";
+import { Server, Room, type Client } from "colyseus";
+import { WebSocketTransport } from "@colyseus/ws-transport";
 
 class HelloRoom extends Room {
   override onCreate(): void {

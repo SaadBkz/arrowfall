@@ -6,11 +6,15 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
+    "@arrowfall/engine": "workspace:*",
+    "@arrowfall/shared": "workspace:*",
+    "@colyseus/schema": "^3.0.0",
     "@colyseus/ws-transport": "^0.16.5",
-    "colyseus": "^0.17.10"
+    "colyseus": "^0.16.5"
   },
   "devDependencies": {
     "tsx": "^4.21.0"

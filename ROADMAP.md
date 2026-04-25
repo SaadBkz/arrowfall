@@ -90,13 +90,11 @@ Note : SPIKE ↔ archer est laissé non-bloquant (comportement Phase 2). La caus
 
 ## Dette technique connue (à adresser plus tard)
 
-### 🔴 Mismatch de version Colyseus client/serveur (à régler en Phase 7)
+### ✅ Mismatch de version Colyseus client/serveur — résolu en Phase 6
 
-- **Symptôme** : ouvrir le client déployé → la console affichera `[colyseus] connection failed` lors du `joinOrCreate("hello")`.
-- **Cause** : `colyseus` (server) est en **0.17.10** (latest npm), mais `colyseus.js` (client SDK) est en **0.16.22** (latest npm). Les deux n'ont pas le même protocole wire.
-- **Impact actuel** : la **chaîne de déploiement** (Vercel + Fly.io) fonctionne, le serveur répond en HTTP, le client build et se sert correctement. Mais l'établissement d'une room WebSocket échoue.
-- **Résolution prévue en Phase 7** (Colyseus state schema + sync) : soit attendre que `colyseus.js@0.17` soit publié sur npm, soit downgrader proprement le serveur en `colyseus@0.16` avec tous les sub-packages alignés (overrides pnpm + clean reinstall). À ce moment-là on pourra valider la connexion réelle.
-- **Ce que ça ne bloque pas** : Phases 1-6 (engine pur, mouvement, combat, rendu local, hot-seat) — aucun réseau impliqué. On peut tout coder et tester sans toucher au serveur.
+- **Décision** : downgrade serveur sur `colyseus@0.16.5` + `@colyseus/schema@^3.0.0`, aligné avec `colyseus.js@0.16.22` (client). `colyseus.js@0.17` n'étant pas publié sur npm, on choisit de baisser le serveur plutôt que d'attendre.
+- **Mise en œuvre** : `pnpm.overrides` racine pin tout l'écosystème Colyseus (`@colyseus/core`, `auth`, `redis-driver`, `redis-presence`, `uwebsockets-transport`, `ws-transport`, `schema`) en 0.16.x — sinon les sous-packages d'autres dépendances Colyseus ramenaient du 0.17 en transitif.
+- **À surveiller** : quand `colyseus.js@0.17` sortira, on pourra upgrade les deux côtés et retirer les overrides (post-MVP).
 
 ### 🟡 Pas encore de CI
 
