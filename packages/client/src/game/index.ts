@@ -1,10 +1,4 @@
-import {
-  type Archer,
-  createWorld,
-  parseMap,
-  stepWorld,
-  type World,
-} from "@arrowfall/engine";
+import { type Archer, createWorld, parseMap, stepWorld, type World } from "@arrowfall/engine";
 import {
   ARENA_HEIGHT_PX,
   ARENA_WIDTH_PX,
@@ -67,9 +61,7 @@ export class Game {
     this.app.stage.addChild(this.gameRoot);
 
     this.bgGraphics = new Graphics();
-    this.bgGraphics
-      .rect(0, 0, ARENA_WIDTH_PX, ARENA_HEIGHT_PX)
-      .fill(BG_COLOR);
+    this.bgGraphics.rect(0, 0, ARENA_WIDTH_PX, ARENA_HEIGHT_PX).fill(BG_COLOR);
     this.gameRoot.addChild(this.bgGraphics);
 
     this.tilemap = new TilemapRenderer(map);

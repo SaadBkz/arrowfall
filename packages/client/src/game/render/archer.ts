@@ -1,8 +1,4 @@
-import {
-  ARCHER_HITBOX_H,
-  ARCHER_HITBOX_W,
-  type Archer,
-} from "@arrowfall/engine";
+import { ARCHER_HITBOX_H, ARCHER_HITBOX_W, type Archer } from "@arrowfall/engine";
 import { DEATH_DURATION_FRAMES, HEAD_HITBOX_H } from "@arrowfall/shared";
 import { Container, Graphics } from "pixi.js";
 import { archerColorFor, lighten } from "../colors.js";
@@ -32,15 +28,16 @@ export class ArchersRenderer {
       // (handled by the engine). We render them in grey + alpha proportional
       // to remaining life; the engine drops them once timer maxes.
       const isDead = !a.alive;
-      const aliveAlpha = a.spawnIframeTimer > 0
-        ? // Spawn iframe — visible blink so the player knows they can't be hit yet.
-          (a.spawnIframeTimer % 8 < 4 ? 0.5 : 1.0)
-        : a.dodgeIframeTimer > 0
-          ? 0.7
-          : 1.0;
-      const alpha = isDead
-        ? 1.0 - a.deathTimer / DEATH_DURATION_FRAMES
-        : aliveAlpha;
+      const aliveAlpha =
+        a.spawnIframeTimer > 0
+          ? // Spawn iframe — visible blink so the player knows they can't be hit yet.
+            a.spawnIframeTimer % 8 < 4
+            ? 0.5
+            : 1.0
+          : a.dodgeIframeTimer > 0
+            ? 0.7
+            : 1.0;
+      const alpha = isDead ? 1.0 - a.deathTimer / DEATH_DURATION_FRAMES : aliveAlpha;
 
       const fillBody = isDead ? 0x666666 : bodyColor;
       const fillHead = isDead ? 0x999999 : headColor;

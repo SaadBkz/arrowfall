@@ -20,9 +20,7 @@ export class ArrowsRenderer {
     g.clear();
 
     for (const arrow of arrows) {
-      const color = arrow.status === "flying"
-        ? ARROW_FLYING_COLOR
-        : ARROW_GROUNDED_COLOR;
+      const color = arrow.status === "flying" ? ARROW_FLYING_COLOR : ARROW_GROUNDED_COLOR;
 
       if (arrow.status === "flying") {
         // Rotate the 8×2 rect around its centre so it tracks velocity.

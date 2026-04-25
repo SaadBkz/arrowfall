@@ -18,12 +18,7 @@ export const TILE_COLORS: Readonly<Record<TileKind, number>> = {
 // order, so p1 < p2 < … < p6 → slots 0..5. Phase 5 will hot-seat 2-4
 // players; the extra slots are pre-allocated.
 export const ARCHER_BODY_COLORS: ReadonlyArray<number> = [
-  0xdd4444,
-  0x4488ff,
-  0x44cc66,
-  0xeecc44,
-  0x222222,
-  0xccffff,
+  0xdd4444, 0x4488ff, 0x44cc66, 0xeecc44, 0x222222, 0xccffff,
 ];
 
 export const ARROW_FLYING_COLOR = 0xffffff;
@@ -34,7 +29,8 @@ export const HUD_TEXT_COLOR = 0xffffff;
 export const archerColorFor = (id: string, fallbackIndex: number): number => {
   const m = /^p(\d+)$/.exec(id);
   const slot = m && m[1] !== undefined ? parseInt(m[1], 10) - 1 : fallbackIndex;
-  const safe = ((slot % ARCHER_BODY_COLORS.length) + ARCHER_BODY_COLORS.length) % ARCHER_BODY_COLORS.length;
+  const safe =
+    ((slot % ARCHER_BODY_COLORS.length) + ARCHER_BODY_COLORS.length) % ARCHER_BODY_COLORS.length;
   return ARCHER_BODY_COLORS[safe]!;
 };
 

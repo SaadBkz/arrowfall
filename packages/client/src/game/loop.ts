@@ -15,11 +15,7 @@ export const MAX_STEPS_PER_FRAME = 5;
 // Pure helper: advance the simulation by as many fixed steps as `deltaMS`
 // affords, calling `stepFn` once per step. Returns the leftover accumulator
 // to carry into the next frame.
-export const runFixedStep = (
-  deltaMS: number,
-  accumulator: number,
-  stepFn: () => void,
-): number => {
+export const runFixedStep = (deltaMS: number, accumulator: number, stepFn: () => void): number => {
   let acc = accumulator + deltaMS;
   let steps = 0;
 
