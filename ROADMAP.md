@@ -21,7 +21,7 @@
 
 ## Phase 5 — Hot-seat 2-4 archers (terminé)
 
-✅ Livrée dans la PR `feat/hot-seat` : <PLACEHOLDER_PR_URL>
+✅ Livrée dans la PR `feat/hot-seat` : <https://github.com/SaadBkz/arrowfall/pull/6>
 
 - `@arrowfall/client/game/input.ts` réécrit en mapper N joueurs : une `KeyboardInput` unique maintient un `Map<playerId, KeyState>` et expose `snapshot(playerId)` / `consumeEdges(playerId)` ; `PLAYER_BINDINGS` data-driven (4 slots p1..p4 prêts) ; `consumeReset()` reste un edge global. Les `preventDefault` codes sont dérivés des bindings actifs (au-delà des 6 toujours bloqués : flèches/Espace/Backspace).
 - **Conflit `KeyR`** (P1 reset vs P2 shoot) résolu en migrant le reset global vers `Backspace` — accessible à tous, sans collision avec les rangées P2 (FRT) ni P1 (J/K). Documenté README + ce ROADMAP.
