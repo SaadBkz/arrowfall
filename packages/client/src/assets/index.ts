@@ -27,6 +27,10 @@ import {
   type ChestSpriteKey,
 } from "./chest-painter.js";
 import {
+  buildDecorationSprites,
+  type DecorationSpriteKey,
+} from "./decoration-painter.js";
+import {
   buildShieldSprites,
   type ShieldSpriteKey,
 } from "./shield-painter.js";
@@ -46,6 +50,10 @@ export type AssetRegistry = {
   readonly chests: ReadonlyMap<ChestSpriteKey, Texture>;
   readonly shields: ReadonlyMap<ShieldSpriteKey, Texture>;
   readonly backgrounds: ReadonlyMap<BackgroundSpriteKey, Texture>;
+  readonly decorations: ReadonlyMap<
+    ThemeId,
+    ReadonlyMap<DecorationSpriteKey, Texture>
+  >;
 };
 
 const toTextureMap = <K>(
@@ -62,8 +70,10 @@ const toTextureMap = <K>(
 export const buildAllAssets = (): AssetRegistry => {
   const tiles = new Map<ThemeId, Map<TileSpriteKey, Texture>>();
   const backgrounds = new Map<BackgroundSpriteKey, Texture>();
+  const decorations = new Map<ThemeId, Map<DecorationSpriteKey, Texture>>();
   for (const theme of ALL_THEMES) {
     tiles.set(theme, toTextureMap(buildTileSprites(theme)));
+    decorations.set(theme, toTextureMap(buildDecorationSprites(theme)));
     for (const [k, v] of toTextureMap(buildBackgroundSprites(theme))) {
       backgrounds.set(k, v);
     }
@@ -78,7 +88,7 @@ export const buildAllAssets = (): AssetRegistry => {
   const chests = toTextureMap(buildChestSprites());
   const shields = toTextureMap(buildShieldSprites());
 
-  return { tiles, archers, arrows, chests, shields, backgrounds };
+  return { tiles, archers, arrows, chests, shields, backgrounds, decorations };
 };
 
 // Re-exports so renderers can import painter constants and types
@@ -124,3 +134,6 @@ export {
 } from "./tile-painter.js";
 export type { TileSpriteKey } from "./tile-painter.js";
 export { PALETTES } from "./palettes.js";
+export type { DecorationKind, DecorationSpriteKey } from "./decoration-painter.js";
+export { spawnDecorations } from "./decoration-spawner.js";
+export type { Decoration } from "./decoration-spawner.js";

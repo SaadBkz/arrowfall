@@ -114,15 +114,43 @@ const paintSunGlow = (g: CanvasRenderingContext2D, p: ThemePalette): void => {
 };
 
 const paintTreeSilhouettes = (g: CanvasRenderingContext2D, p: ThemePalette): void => {
-  // Distant rolling trees along a horizon at y=200.
+  // Three rolling layers of forest, each darker as we go back. Adds
+  // real depth instead of one flat row of trees.
   const horizonY = 200;
-  // Background hill.
-  rect(g, 0, horizonY, BG_W, BG_H - horizonY, p.accent[0]);
-  rect(g, 0, horizonY, BG_W, 1, p.accent[1]);
-  // Tree clusters.
+
+  // Layer A — far-back hill (darkest).
+  rect(g, 0, horizonY - 30, BG_W, BG_H - (horizonY - 30), p.accent[0]);
+  // Painted bumpy ridge.
+  for (let x = 0; x < BG_W; x += 8) {
+    const h = 4 + Math.round(Math.sin(x * 0.05) * 3 + Math.cos(x * 0.02) * 2);
+    rect(g, x, horizonY - 30 - h, 8, h, p.accent[0]);
+  }
+  // Far-back tiny tree silhouettes.
+  for (let i = 0; i < 14; i++) {
+    const tx = 20 + i * 34 + (i % 2) * 10;
+    paintTreeSmall(g, tx, horizonY - 30, p, 0);
+  }
+
+  // Layer B — mid hill.
+  rect(g, 0, horizonY - 8, BG_W, BG_H - (horizonY - 8), p.accent[0]);
+  rect(g, 0, horizonY - 8, BG_W, 1, p.accent[1]);
+  for (let x = 0; x < BG_W; x += 4) {
+    const h = 2 + Math.round(Math.sin(x * 0.08) * 2);
+    if (h > 0) rect(g, x, horizonY - 8 - h, 4, h, p.accent[0]);
+  }
+
+  // Layer C — front trees (biggest, brightest).
   const trees = [30, 80, 150, 210, 280, 350, 420, 460];
   for (const tx of trees) {
     paintTree(g, tx, horizonY, p);
+  }
+  // Sparse fireflies.
+  const rng = mulberry32(0xa11_f15);
+  for (let i = 0; i < 12; i++) {
+    const fx = Math.floor(rng() * BG_W);
+    const fy = horizonY - 20 - Math.floor(rng() * 60);
+    px(g, fx, fy, p.metal[3]);
+    px(g, fx + 1, fy, p.metal[2]);
   }
 };
 
@@ -133,11 +161,29 @@ const paintTree = (
   p: ThemePalette,
 ): void => {
   // Trunk.
-  rect(g, tx, baseY - 12, 3, 12, p.wood[0]);
-  // Foliage triangle.
-  rect(g, tx - 6, baseY - 16, 15, 4, p.accent[0]);
-  rect(g, tx - 4, baseY - 20, 11, 4, p.accent[0]);
-  rect(g, tx - 2, baseY - 24, 7, 4, p.accent[1]);
+  rect(g, tx, baseY - 14, 3, 14, p.wood[0]);
+  rect(g, tx + 2, baseY - 14, 1, 14, p.wood[1]);
+  // Foliage triangle stack.
+  rect(g, tx - 6, baseY - 18, 15, 4, p.accent[0]);
+  rect(g, tx - 4, baseY - 22, 11, 4, p.accent[0]);
+  rect(g, tx - 2, baseY - 26, 7, 4, p.accent[1]);
+  // Highlights.
+  px(g, tx - 5, baseY - 18, p.accent[1]);
+  px(g, tx - 3, baseY - 22, p.accent[1]);
+  px(g, tx - 1, baseY - 25, p.accent[2]);
+  px(g, tx + 1, baseY - 23, p.accent[2]);
+};
+
+const paintTreeSmall = (
+  g: CanvasRenderingContext2D,
+  tx: number,
+  baseY: number,
+  p: ThemePalette,
+  _layer: number,
+): void => {
+  rect(g, tx, baseY - 7, 1, 7, p.wood[0]);
+  rect(g, tx - 2, baseY - 9, 5, 3, p.accent[0]);
+  rect(g, tx - 1, baseY - 12, 3, 3, p.accent[0]);
 };
 
 // ── Twin Spires ───────────────────────────────────────────────────
@@ -175,18 +221,54 @@ const paintSnow = (g: CanvasRenderingContext2D, p: ThemePalette): void => {
 };
 
 const paintMountains = (g: CanvasRenderingContext2D, p: ThemePalette): void => {
-  // Two big triangular peaks.
   const horizonY = 210;
+  // Far layer — pale silhouette.
+  rect(g, 0, horizonY - 35, BG_W, 35, p.sky[3]);
+  paintTriangle(g, 50, horizonY - 35, 100, 50, p.sky[2]);
+  paintTriangle(g, 200, horizonY - 35, 130, 65, p.sky[2]);
+  paintTriangle(g, 360, horizonY - 35, 110, 55, p.sky[2]);
+  // Mid layer — main peaks.
   rect(g, 0, horizonY, BG_W, BG_H - horizonY, p.stone[0]);
-  // Peak 1.
   paintTriangle(g, 100, horizonY, 80, 70, p.stone[1]);
-  paintTriangle(g, 110, horizonY, 80, 50, p.accent[2]); // snow cap area
-  // Peak 2.
+  paintTriangle(g, 110, horizonY, 80, 50, p.accent[2]); // snow cap
   paintTriangle(g, 320, horizonY, 100, 90, p.stone[1]);
   paintTriangle(g, 332, horizonY, 100, 60, p.accent[2]);
-  // Smaller foothills.
+  // Foothills.
   paintTriangle(g, 220, horizonY, 60, 35, p.stone[2]);
   paintTriangle(g, 410, horizonY, 50, 30, p.stone[2]);
+  // Northern lights — three faint vertical streaks.
+  g.globalAlpha = 0.18;
+  for (const [x, color] of [
+    [120, p.accent[2]],
+    [240, p.metal[2]],
+    [380, p.accent[3]],
+  ] as ReadonlyArray<readonly [number, string]>) {
+    g.fillStyle = color;
+    g.fillRect(x, 30, 2, 80);
+    g.fillRect(x + 2, 50, 1, 60);
+    g.fillRect(x - 2, 60, 1, 50);
+  }
+  g.globalAlpha = 1;
+  // Pine trees in front of the mid mountains, dark.
+  const pines = [25, 60, 95, 165, 195, 250, 285, 380, 420, 455];
+  for (const px_ of pines) {
+    paintPine(g, px_, horizonY, p);
+  }
+};
+
+const paintPine = (
+  g: CanvasRenderingContext2D,
+  tx: number,
+  baseY: number,
+  p: ThemePalette,
+): void => {
+  rect(g, tx + 1, baseY - 4, 1, 4, p.stone[0]);
+  // Pine layered triangle.
+  rect(g, tx - 3, baseY - 6, 7, 2, p.stone[0]);
+  rect(g, tx - 2, baseY - 9, 5, 3, p.stone[0]);
+  rect(g, tx - 1, baseY - 12, 3, 3, p.stone[0]);
+  // Snow tip.
+  px(g, tx + 1, baseY - 12, p.accent[3]);
 };
 
 const paintTriangle = (
@@ -223,24 +305,66 @@ const paintSigils = (g: CanvasRenderingContext2D, p: ThemePalette): void => {
 };
 
 const paintColumns = (g: CanvasRenderingContext2D, p: ThemePalette): void => {
-  // 4 stone columns spaced across the bottom + giant idol silhouette
-  // in the centre back.
+  // Multi-layer Mayan temple interior:
+  //   far back — pyramid silhouette
+  //   mid     — giant carved idol head
+  //   front   — column array with gold trim
+  //   floating — torch braziers + glyphs
   const horizonY = 220;
   rect(g, 0, horizonY, BG_W, BG_H - horizonY, p.stone[0]);
 
-  // Idol — wide stone silhouette behind, centred horizontally.
-  rect(g, 200, 100, 80, 130, p.stone[0]);
-  rect(g, 220, 80, 40, 30, p.stone[0]);
-  // Glowing eyes.
-  px(g, 230, 100, p.fire[2]);
-  px(g, 250, 100, p.fire[2]);
+  // Far pyramid silhouette.
+  paintTriangle(g, 80, horizonY, 320, 180, p.sky[3]);
+  // Torch step lines on the pyramid.
+  rect(g, 100, 110, 280, 1, p.fire[0]);
+  rect(g, 130, 70, 220, 1, p.fire[0]);
+  rect(g, 160, 30, 160, 1, p.fire[0]);
 
-  // Columns.
-  const cols = [40, 130, 350, 440];
+  // Idol head — bigger, more detailed.
+  rect(g, 180, 80, 120, 150, p.stone[0]);
+  rect(g, 200, 50, 80, 35, p.stone[0]);
+  // Headdress feathers.
+  rect(g, 170, 60, 8, 30, p.metal[0]);
+  rect(g, 302, 60, 8, 30, p.metal[0]);
+  rect(g, 172, 70, 4, 20, p.fire[1]);
+  rect(g, 304, 70, 4, 20, p.fire[1]);
+  // Glowing eyes.
+  rect(g, 215, 110, 18, 8, p.fire[2]);
+  rect(g, 247, 110, 18, 8, p.fire[2]);
+  rect(g, 219, 113, 10, 4, p.fire[3]);
+  rect(g, 251, 113, 10, 4, p.fire[3]);
+  // Nose / mouth.
+  rect(g, 235, 130, 10, 18, p.metal[1]);
+  rect(g, 215, 155, 50, 8, p.stone[0]);
+  // Fangs.
+  rect(g, 220, 163, 4, 6, p.text[3]);
+  rect(g, 240, 163, 4, 6, p.text[3]);
+  rect(g, 256, 163, 4, 6, p.text[3]);
+
+  // Columns — front layer, beefier with cap detail.
+  const cols = [20, 110, 360, 450];
   for (const cx of cols) {
-    rect(g, cx, 130, 12, 100, p.stone[1]);
-    rect(g, cx, 130, 12, 4, p.metal[1]); // capital
-    rect(g, cx, 226, 12, 4, p.metal[1]); // base
-    rect(g, cx + 4, 134, 4, 92, p.stone[2]); // shaft highlight
+    rect(g, cx, 110, 16, 130, p.stone[1]);
+    rect(g, cx + 1, 110, 14, 6, p.metal[1]); // capital
+    rect(g, cx, 116, 16, 2, p.metal[0]);
+    rect(g, cx, 232, 16, 8, p.metal[1]); // base
+    rect(g, cx + 5, 120, 6, 110, p.stone[2]); // shaft highlight
+    // Glyph rows on shaft.
+    for (let y = 130; y < 220; y += 18) {
+      rect(g, cx + 4, y, 8, 1, p.metal[2]);
+      px(g, cx + 7, y - 1, p.accent[2]);
+    }
   }
+
+  // Floating glyphs/runes scattered.
+  const rng = mulberry32(0xdeadc0de);
+  g.globalAlpha = 0.55;
+  for (let i = 0; i < 14; i++) {
+    const sx = Math.floor(rng() * BG_W);
+    const sy = 30 + Math.floor(rng() * 150);
+    px(g, sx, sy, p.accent[2]);
+    px(g, sx + 1, sy, p.accent[3]);
+    px(g, sx, sy + 1, p.accent[3]);
+  }
+  g.globalAlpha = 1;
 };
