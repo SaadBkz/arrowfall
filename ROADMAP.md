@@ -15,9 +15,43 @@
 | **6** | Colyseus state schema + sync naïve | 2 onglets, état partagé | ✅ |
 | **7** | Client prediction + reconciliation + interpolation | latence ressentie < 100 ms | ✅ |
 | **8** | Lobby, code de room 4 lettres, écran fin de round/match | match complet 2 joueurs distants | ✅ |
-| **9** | Coffres + flèches Bomb, Drill, Laser + Shield | mécaniques complètes | ⏳ |
+| **9a** | Coffres + flèche Bomb (loot + explosion) | match avec coffres et explosions | ✅ |
+| **9b** | Flèches Drill + Laser + Shield (mécaniques restantes) | mécaniques complètes | ⏳ |
 | **10** | 3 maps designées + intégration assets pixel art CC0 | jeu visuel complet | ⏳ |
 | **11** | SFX + musique CC0 + polish + gamepad + fullscreen | MVP livré | ⏳ |
+
+## Phase 9a — Coffres + flèche Bomb (terminé)
+
+✅ Livrée dans la PR `feat/chests-arrows` : *(URL backfill après merge)*
+
+> Phase 9 a été splittée en deux sous-PRs vu le scope (~3000 lignes total). Phase 9a livre coffres + Bomb (la moitié spectaculaire : loot + explosion). Phase 9b finira avec Drill + Laser + Shield.
+
+- **`getRoundOutcome` shared via `@arrowfall/engine/round-state`** — déjà extrait Phase 8, inchangé ici.
+- **Bomb arrow** (`@arrowfall/engine/arrow`) — `ArrowType` étendu en `"normal" | "bomb"`. Constants : `BOMB_ARROW_SPEED=4.5`, `BOMB_FUSE_FRAMES=60`, `BOMB_RADIUS_PX=24`. `ArrowStatus` gagne `"exploding"` (transient, vit ≤ 1 tick — jamais visible sur le wire). `stepArrow` flippe le status dès qu'`age >= BOMB_FUSE` ou collision wall ; sinon physique normale (semi-implicit Euler + sweep SOLID).
+- **`Archer.bombInventory: number`** — compteur séparé du `inventory` (normal arrows). `applyShoot` consomme bomb en priorité (un joueur qui pickup une bomb veut probablement la balancer maintenant). `dropArrowsOnDeath` éjecte normals d'abord puis bombs dans le même fan déterministe à N angles. Refactor en `inventory: ArrowType[]` reporté à Phase 9b si Drill/Laser/Shield poussent à >= 5 fields séparés.
+- **Explosion** dans `stepWorld` (étape 5, AVANT arrow↔archer) — pour chaque arrow `status="exploding"`, calcule un AABB carré de demi-côté `BOMB_RADIUS_PX` autour de `arrow.pos` ; tue tous les archers `alive` qui intersectent (modulo `spawnIframeTimer` + `dodgeIframeTimer` — règle iframe identique aux flèches normales) ; émet `bomb-exploded` + `archer-killed cause:"bomb"`. Multi-kills déterministes en ordre alphabétique d'archerId.
+- **`@arrowfall/engine/chest`** — nouveau module pur : `Chest` (id, pos, status `"closed"|"opening"|"opened"`, openTimer, openerId, contents `{ type, count }`) + `stepChest` (decrement timer). Le module est pur — la cadence de spawn et le loot sortent du serveur.
+- **`stepWorld` chest flow** (étape 9) — closed + alive-archer-overlap → `opening` (openTimer = 30, openerId = matched archer) ; opening + openTimer == 0 → deliver loot to opener inventory + emit `chest-opened` + remove. Si l'opener est mort entre trigger et delivery, le coffre est consommé sans loot (event quand même émis pour le SFX). Délivrance directe à l'inventory (pas d'éjection de flying arrows — plus simple, déterministe ; spec §6.2 l'autorise).
+- **`World.chests: ReadonlyArray<Chest>`** — nouveau field. `createWorld` initialise vide ; `world.chests ?? []` dans stepWorld pour rester backward-compat avec les test-stubs Phase 3.
+- **`CHEST_SPAWN` tile** (`C` char) — déjà présent dans `@arrowfall/shared` depuis Phase 1, inchangé. `parseMap` extrait déjà `MapData.chestSpawns: Vec2[]`. Maps `arena-01` (2 chest_spawns) et `arena-02` (3 chest_spawns) mises à jour pour l'utiliser.
+- **Server `ChestSpawner`** (`packages/server/src/rooms/chest-spawner.ts`) — vit hors de l'engine (cadence + loot non-déterministes par room, `Math.random` direct). Schedule : `randomInterval()` ∈ [240, 480] frames (4-8 s @ 60 Hz) ; max `CHEST_MAX_SIMULTANEOUS = 2` chests simultanés ; ne respawn pas sur un tile occupé. Loot table 9a (simplifiée — 30%/15%/10%/5% drill/laser/shield de spec §6.2 fold dans les deux types disponibles) :
+  - 60% : 2 normal arrows
+  - 40% : 2 bomb arrows
+- **`ArenaRoom` intégration** : `chestSpawner.reset(world.tick)` au start de chaque round (`startMatch` + `startNextRound`) ; `chestSpawner.maybeSpawn` appelé dans `simulate()` uniquement en phase `"playing"` (round-end ne spawn plus, les chests existants restent visibles pendant le freeze).
+- **Wire schema** : `ArcherState.bombInventory: uint8`, `ArrowState.arrowType: string`, nouveau `ChestState` (id, pos, status, openTimer, openerId, lootType, lootCount), `MatchState.chests: ArraySchema<ChestState>`. `worldToMatchState` upserts/prunes la chest array. Mirror client en lockstep.
+- **Render client** :
+  - `ArrowsRenderer` étendu — bombs en rouge vif (`BOMB_FLYING_COLOR=0xff4040`) en vol, gris-rouge au sol. Status "exploding" rendu comme grounded (1 frame max avant que le serveur consomme).
+  - `ChestsRenderer` (nouveau) — carré 14×14 doré avec contour foncé + ligne charnière. Lerp couleur closed → bright pendant l'opening (0..30 frames). Inséré entre arrows et archers dans le z-order.
+- **Tradeoffs** :
+  - Pas de FX d'explosion visuel pour Phase 9a (la bomb arrow disparaît cleanement, les kills s'enregistrent dans la HUD score). Phase 9b ou Phase 11 (polish) ajoutera un cercle expanding 18 frames.
+  - `bombInventory` n'est pas interpolé pour les remotes (Phase 7 `archerFromSnapshot` met 0) — c'est un compteur HUD privé visible uniquement par son owner via la mirror state, pas par interpolation.
+  - Loot délivré direct à l'inventaire au lieu d'être éjecté en flying arrows : simpler + déterministe + évite une 2e collision pass. Spec §6.2 dit "contenu éjecté" — fonctionnellement équivalent du point de vue gameplay.
+- **Tests** : engine 130 → **147** (+17 : `arrow/bomb.test.ts` 4 cas, `chest/chest.test.ts` 8 cas, `world/bomb-explosion.test.ts` 5 cas). Server 64 → **72** (+8 : `chest-spawner.test.ts` — schedule, caps, free-position, loot table). Client 29 → **30** (+1 : `MatchState.chests` defaults).
+- **Validation manuelle** (à exécuter au merge) :
+  1. Two tabs sur `http://localhost:5173/`, host + join + ready up.
+  2. Attendre 4-8 s : un coffre (carré doré) apparaît sur un `C` tile de la map.
+  3. Marcher dessus → animation 30 frames → loot délivré (HUD inventory bump).
+  4. Si loot = bomb (40% du temps) → tirer → flèche rouge → explose au mur ou après 60 frames → kill l'archer adverse dans le rayon.
 
 ## Phase 8 — Lobby + code de room + fin de round/match (terminé)
 
