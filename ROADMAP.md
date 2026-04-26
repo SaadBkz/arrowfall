@@ -14,10 +14,39 @@
 | **5** | Hot-seat 2-4 archers même clavier | démo locale 2-4 joueurs | ✅ |
 | **6** | Colyseus state schema + sync naïve | 2 onglets, état partagé | ✅ |
 | **7** | Client prediction + reconciliation + interpolation | latence ressentie < 100 ms | ✅ |
-| **8** | Lobby, code de room 4 lettres, écran fin de round/match | match complet 2 joueurs distants | ⏳ |
+| **8** | Lobby, code de room 4 lettres, écran fin de round/match | match complet 2 joueurs distants | ✅ |
 | **9** | Coffres + flèches Bomb, Drill, Laser + Shield | mécaniques complètes | ⏳ |
 | **10** | 3 maps designées + intégration assets pixel art CC0 | jeu visuel complet | ⏳ |
 | **11** | SFX + musique CC0 + polish + gamepad + fullscreen | MVP livré | ⏳ |
+
+## Phase 8 — Lobby + code de room + fin de round/match (terminé)
+
+✅ Livrée dans la PR `feat/lobby-rooms` : *(URL backfill après merge)*
+
+- **Codes de room 4 lettres** (`packages/server/src/rooms/room-codes.ts`) — alphabet `ABCDEFGHJKLMNPQRSTUVWXYZ` (24 lettres, sans `I`/`O` qui se confondent avec `1`/`0` sur une capture mobile). Registry process-locale (`Set<string>`) qui réserve à `onCreate` et libère à `onDispose`. `pickAvailableRoomCode(maxAttempts=10)` choisit un code libre ; `reserveRoomCode(code)` accepte un code fourni par le host (collision = throw clair). 24⁴ = 331 776 combinaisons → collision quasi-impossible aux échelles MVP. Côté client le même contrat est dupliqué (`packages/client/src/net/room-codes.ts`) — pas d'import croisé client↔serveur, juste un wire-contract partagé.
+- **Matchmaker** : `gameServer.define("arena", ArenaRoom).filterBy(["code"])`. Le host appelle `client.create("arena", { code })`, les invités `client.join("arena", { code })` — Colyseus route sur les options de création. `setMetadata`/`setPrivate` retirés de `onCreate` car non-initialisés hors du matchmaker (les tests construisent la room via `new ArenaRoom()`).
+- **State machine `MatchState`** étendue (`packages/server/src/state/match-state.ts`) : `phase ∈ {"lobby", "playing", "round-end", "match-end"}`, `phaseTimer` (frames), `roomCode`, `roundNumber`, `targetWins` (clamp [1,9], default 3), `wins: MapSchema<uint8>`, `ready: MapSchema<bool>`, `roundWinnerSessionId`, `matchWinnerSessionId`. Le client mirror le schéma en lockstep dans `packages/client/src/net/schema.ts` (sinon corruption silencieuse — voir cause Phase 6 sur `useDefineForClassFields`).
+- **Flow `ArenaRoom`** :
+  - `lobby` → simulate ne tick pas le world. `onMessage("ready")` toggle `state.ready[sessionId]` ; quand tous prêts ET `archers.size ≥ 2` → `startMatch()` (rebuild world, `phase="playing"`, `roundNumber=1`).
+  - `playing` → simulate normal. À chaque tick on évalue `getRoundOutcome(world)` (extrait du client vers `@arrowfall/engine/round-state` pour partage authoritatif) ; sur `win`/`draw` → `endRound()` qui incrémente `wins[winner]` puis `phase="round-end"`, `phaseTimer=180` (3 s).
+  - `round-end` → continue à simuler (les frags d'animation de mort jouent sous le texte). Quand `phaseTimer==0` : si max(wins) ≥ targetWins → `endMatch()` (`phase="match-end"`, `phaseTimer=360` = 6 s) ; sinon → `startNextRound()` (rebuild, `roundNumber++`).
+  - `match-end` → décrémente le timer. À 0 → `resetToLobby()` (reset wins/ready/roundNumber, `phase="lobby"`). Le `lastInputTick` reste monotone à travers le reset (clientTick = horloge locale, voir Phase 7).
+- **Mid-round join/leave** :
+  - Join en `playing`/`round-end` → ajouté à `archerIdBySession` + `state.wins[sessionId]=0` + `state.ready[sessionId]=false`, mais PAS dans le world en cours. Apparait au prochain `rebuildWorld()` (start du round suivant). Évite le bug Phase 6 où chaque join resetait tout le monde.
+  - Leave en `playing`/`round-end` → `forfeitArcher(slot)` flippe `archer.alive=false` en place (rebuild un Map immutable car `World.archers` est `ReadonlyMap`). Le tick suivant voit ≤ 1 alive → endRound. Le score `state.wins[sessionId]` est conservé pour l'écran post-match.
+- **Inputs gated par phase** : `handleInput` ignore tout sauf `playing`/`round-end`. Côté client, `tickNetworked` skip `prediction.stepLocal` et `room.send("input")` hors-jeu, et drop l'`accumulator` pour éviter une rafale de ticks à la reprise.
+- **Menu HTML** (`packages/client/src/ui/menu-overlay.ts` + `style.css`) — un seul `#menu-overlay` div par-dessus le canvas, avec écrans : start (Local / Host / Join), join-form (input 4 lettres), connecting, lobby (code + roster + Ready button), match-end (winner + scores + countdown). `escapeHtml()` defensive sur les champs serveur. Le menu re-render à chaque `onStateChange` (cheap, < 200 nodes). Aucun framework UI — juste du DOM natif, le user est débutant et la surface est minuscule.
+- **`Game` refactor** (`packages/client/src/game/index.ts`) — le constructeur accepte une `Room<MatchState>` injectée (`main.ts` orchestre la connexion via le menu). `connectAsync()` supprimé, remplacé par `attachRoom(room)`. Nouveau `onPhaseChange(listener)` que le menu utilise pour swap les panels. HUD networked affiche `<CODE> · <phase> · p1 1 / p2 0 (to 3)` au lieu du badge "online — N players" Phase 6.
+- **Round overlay Pixi** : `RoundMessageRenderer` réutilisé (déjà partagé via `@arrowfall/engine/round-state.RoundOutcome`). En networked, `composeRoundOverlay()` traduit `state.phase=="round-end"` + `roundWinnerSessionId` → `RoundOutcome` autoritaire (plus dépendant d'un `getRoundOutcome` local qui pourrait diverger).
+- **URL params** dev-shortcut (`?local=1`, `?host=1`, `?join=ABCD`, `?net=1` legacy) — sinon menu par défaut. Documenté dans `packages/client/README.md`.
+- **Tests** : engine 125 → **130** (+5 — `getRoundOutcome` déplacé de client vers `@arrowfall/engine/round-state`). Server 34 → **64** (+30 : `room-codes.test.ts` 11 cas, `arena-flow.test.ts` 19 cas — code allocation, lobby readiness, round resolution, match end, mid-round join/leave forfeit). Client 26 → **29** (+3 : `room-codes.test.ts` 5 cas, `schema.test.ts` 4 cas, dont `MatchState` defaults). `RoundMessage` test removed (déplacé dans engine).
+- **Helpers tests** (`forceStartMatchForTest`, `expireFreezeForTest`, `killArcherForTest`) exposés sur `ArenaRoom` — évitent de tickr 180+ frames pour franchir un freeze, et de plumber un arrow hit déterministe pour terminer un round.
+- **Validation manuelle** (à exécuter au merge) :
+  1. Tab A : <https://arrowfall-ten.vercel.app> → menu → Host a room → note le code (ex. `XQRP`).
+  2. Tab B : même URL → Join with code → `XQRP` → atterrit dans le même lobby.
+  3. Les deux cliquent Ready → match démarre, jouer un round, vérifier que le score s'incrémente.
+  4. Round 2-3 → quand un joueur atteint 3 wins, écran match-end, retour lobby auto après 6 s.
+  5. Mid-round leave (fermer Tab A) → Tab B doit voir le round se terminer immédiatement (forfait) avec lui en gagnant.
 
 ## Phase 7 — Client prediction + reconciliation + interpolation (terminé)
 

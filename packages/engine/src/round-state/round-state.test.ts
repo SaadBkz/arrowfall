@@ -1,7 +1,8 @@
-import { type Archer, type World } from "@arrowfall/engine";
-import { type MapData } from "@arrowfall/shared";
+import type { MapData } from "@arrowfall/shared";
 import { describe, expect, it } from "vitest";
-import { getRoundOutcome } from "./round-state.js";
+import { type Archer } from "../archer/index.js";
+import { type World } from "../world/index.js";
+import { getRoundOutcome } from "./index.js";
 
 // Minimal Archer stub: getRoundOutcome only reads `archer.alive` and
 // `archer.id`. Casting through `unknown` keeps the test orthogonal to
@@ -20,7 +21,7 @@ const buildWorld = (archers: ReadonlyArray<Archer>): World => {
 };
 
 describe("getRoundOutcome", () => {
-  it("returns 'ongoing' while ≥ 2 archers are alive", () => {
+  it("returns 'ongoing' while >= 2 archers are alive", () => {
     const w = buildWorld([stubArcher("p1", true), stubArcher("p2", true), stubArcher("p3", false)]);
     expect(getRoundOutcome(w)).toEqual({ kind: "ongoing" });
   });

@@ -1,7 +1,9 @@
-import { type World } from "@arrowfall/engine";
+import { type World } from "../world/index.js";
 
-// Last Archer Standing outcome (spec §7.1). Kept pure & engine-only so
-// it tests headlessly without any Pixi import.
+// Last Archer Standing outcome (spec §7.1). Pure & engine-only so client
+// and server can share it — Phase 8 needs the same predicate authoritative
+// on the server (drives round/match transitions) and locally on the client
+// (drives the win-text overlay during the predicted frame).
 //
 // Freeze policy: as soon as the alive-count drops to ≤ 1 we emit `win`
 // or `draw`. We deliberately use `archer.alive` (the boolean), NOT

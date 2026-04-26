@@ -1,6 +1,6 @@
 # `@arrowfall/client`
 
-Client navigateur — rendu PixiJS v8, capture clavier, boucle de jeu. **Aucune logique de jeu côté client** : toute la physique passe par `@arrowfall/engine`. Depuis la Phase 6, le serveur Colyseus tient la simulation autoritaire (`stepWorld` à 60 Hz côté serveur) et le client est en mode rendu pur lorsqu'il est en networked. Sans le toggle `?net=1`, le client tourne en hot-seat local (Phase 5).
+Client navigateur — rendu PixiJS v8, capture clavier, boucle de jeu. **Aucune logique de jeu côté client** : toute la physique passe par `@arrowfall/engine`. Depuis la Phase 6, le serveur Colyseus tient la simulation autoritaire (`stepWorld` à 60 Hz côté serveur) et le client est en mode rendu pur lorsqu'il est en networked. Phase 8 ajoute le menu d'accueil HTML (Local / Host / Join) et les écrans lobby + match-end ; sans param URL, le menu s'affiche au boot.
 
 ## Lancer en local
 
@@ -8,7 +8,7 @@ Client navigateur — rendu PixiJS v8, capture clavier, boucle de jeu. **Aucune 
 pnpm --filter @arrowfall/client dev    # http://localhost:5173
 pnpm --filter @arrowfall/client build  # bundle Vite dans dist/
 pnpm --filter @arrowfall/client typecheck
-pnpm --filter @arrowfall/client test   # vitest run (round-state + map fixtures)
+pnpm --filter @arrowfall/client test   # vitest run (room-codes, schema defaults, map fixtures, prediction, interpolation)
 ```
 
 Pré-requis : Node ≥ 20, pnpm ≥ 9, deps installées via `pnpm install` à la racine.
@@ -17,33 +17,37 @@ Pré-requis : Node ≥ 20, pnpm ≥ 9, deps installées via `pnpm install` à la
 
 ```
 src/
-├── main.ts                  # entry — boot Pixi.Application + Game.start(),
-│                              parse `?net=1` flag → mode "local" | "networked"
-├── style.css                # canvas crisp + body fullscreen
+├── main.ts                  # entry — orchestrate menu → Game; URL-param shortcuts
+├── style.css                # canvas crisp + menu overlay (Phase 8)
 ├── maps/                    # client-only map fixtures (server has its own copy)
 │   ├── arena-01.json        # 2 spawns (default 2P)
 │   ├── arena-02.json        # 4 spawns en quinconce (PLAYER_COUNT ≥ 3)
 │   └── maps.test.ts
-├── net/                     # Phase 6 — networked mode
-│   ├── client.ts            # connectToArena() — colyseus.js wrapper, auto URL
-│   ├── schema.ts            # client mirror of server's MatchState/Archer/Arrow
+├── ui/                      # Phase 8 — HTML overlay (lobby / menu / match-end)
+│   └── menu-overlay.ts      # MenuOverlay — start, join-form, lobby, match-end
+├── net/                     # Phase 6+7+8 — networked mode
+│   ├── client.ts            # createRoom(), joinRoomByCode(), connectToArena() (compat)
+│   ├── schema.ts            # client mirror of server's MatchState (incl. Phase 8 fields)
 │   ├── match-mirror.ts      # matchStateToWorld(state, mapData) → engine.World
+│   ├── prediction.ts        # PredictionEngine (Phase 7)
+│   ├── interpolation.ts     # RemoteInterpolator (Phase 7)
+│   ├── room-codes.ts        # generateRoomCode/normalize/isValid — client mirror
 │   └── index.ts             # barrel
 └── game/
-    ├── index.ts             # class Game — owns stage, World, ticker, input,
-    │                          PLAYER_COUNT (2..4), map switch, mode toggle
+    ├── index.ts             # class Game — accepts an injected Room, drives ticker,
+    │                          gates inputs by phase, exposes onPhaseChange + sendReady
     ├── input.ts             # keyboard → ArcherInput per player
-    ├── loop.ts              # fixed-timestep accumulator (60 Hz, local only)
+    ├── loop.ts              # fixed-timestep accumulator (60 Hz, local + playing)
     ├── colors.ts
-    ├── round-state.ts
-    ├── round-state.test.ts
     └── render/
         ├── tilemap.ts
         ├── archer.ts
         ├── arrow.ts
-        ├── hud.ts           # +badge "online — N players" / "local — N players"
-        └── round-message.ts
+        ├── hud.ts           # +badge "<CODE> · <phase> · p1 N / p2 N (to T)"
+        └── round-message.ts # round-end overlay (driven by server roundWinner)
 ```
+
+`getRoundOutcome(world)` a migré dans `@arrowfall/engine/round-state` (Phase 8) — partagé entre client (overlay) et serveur (machine d'états authoritative).
 
 ## Hot-seat — bindings clavier multi-joueurs
 
@@ -106,46 +110,53 @@ Pour les flèches `flying`, l'orientation suit la vélocité via `Math.atan2(vy,
 
 ### Round end + win message
 
-`getRoundOutcome(world)` ([`game/round-state.ts`](./src/game/round-state.ts)) est pur (pas d'import Pixi) — testé Vitest. Le freeze déclenche dès que `alive ≤ 1`, sans attendre la fin du `deathTimer`. La logique :
+`getRoundOutcome(world)` est exporté par `@arrowfall/engine/round-state` (extrait du client en Phase 8 pour partage avec le serveur autoritatif). Le freeze déclenche dès que `alive ≤ 1`, sans attendre la fin du `deathTimer`. La logique :
 
 - `≥ 2` archers `alive=true` → `ongoing`
 - `=== 1` → `win`, avec `winnerId`
 - `=== 0` (kill simultané) → `draw` (pas de point — spec §7.1)
 
-Le `RoundMessageRenderer` overlay est centré logiquement (240, 135), reste en sommet du `gameRoot`, et reste affiché jusqu'au reset. La fragmentation continue en arrière-plan jusqu'à `DEATH_DURATION_FRAMES` (le moteur despawne le corps ensuite).
-
-Pas de score cumulé entre rounds — c'est Phase 8 (lobby + match).
+En **local** le `RoundMessageRenderer` calcule l'outcome localement. En **networked** (Phase 8), l'overlay suit `state.phase === "round-end"` + `state.roundWinnerSessionId` — autoritaire, déterministe, pas de divergence possible avec le serveur. La fragmentation continue en arrière-plan jusqu'à `DEATH_DURATION_FRAMES` (le moteur despawne le corps ensuite).
 
 ## Tester
 
-Vitest minimal côté client en Phase 5 :
+Vitest côté client (29 cas, ~0.6 s) :
 
-- `game/round-state.test.ts` — 5 cas (ongoing / win / draw / roster vide / corps despawné)
 - `maps/maps.test.ts` — parse + spawn-count assertions sur arena-01 et arena-02
+- `net/prediction.test.ts` — Phase 7, 7 cas
+- `net/interpolation.test.ts` — Phase 7, 12 cas
+- `net/room-codes.test.ts` — Phase 8, 5 cas (normalize / isValid / generate)
+- `net/schema.test.ts` — Phase 8, 4 cas (`isMatchPhase` + `MatchState` defaults)
 
 ```bash
 pnpm --filter @arrowfall/client test
 ```
 
-Pas de tests browser (Playwright/Cypress = trop d'overhead). L'engine reste **125/125 verts** ; aucune modif de `@arrowfall/engine` ou `@arrowfall/shared` dans cette phase (multi-archers déjà câblé Phase 3).
+L'outcome d'une manche (`getRoundOutcome`) a migré dans `@arrowfall/engine` en Phase 8 — voir `packages/engine/src/round-state/round-state.test.ts` (5 cas) pour les tests pivot.
 
-## Mode networked (Phase 6)
+Pas de tests browser (Playwright/Cypress = trop d'overhead). L'engine est à **130/130 verts** depuis Phase 8.
 
-Le toggle URL `?net=1` bascule le client en mode réseau. Sans le flag, le hot-seat Phase 5 est inchangé.
+## Mode networked (Phase 6 → Phase 8)
+
+Phase 8 — au boot, le menu HTML s'affiche par défaut avec 3 entrées : **Hot-seat**, **Host a room**, **Join with code**. Sans menu, des shortcuts URL restent disponibles pour la repro / le dev :
 
 ```
-http://localhost:5173/             → mode local (hot-seat 2-4P)
-http://localhost:5173/?net=1       → mode networked (Colyseus arena room)
+http://localhost:5173/             → menu d'accueil (Local / Host / Join)
+http://localhost:5173/?local=1     → mode local (hot-seat 2-4P, skip menu)
+http://localhost:5173/?host=1      → host une room (skip menu)
+http://localhost:5173/?join=ABCD   → join la room ABCD (skip menu)
+http://localhost:5173/?net=1       → alias legacy de ?host=1 (Phase 6 quick-play)
 ```
 
-| | Local | Networked (`?net=1`) |
+| | Local | Networked (host/join) |
 |---|---|---|
-| `stepWorld` | client (60 Hz fixed-step) | serveur uniquement |
-| Inputs | mappés sur 2-4 slots clavier | seul P1 (`←/→/↑/↓/Espace/J/K`) → `room.send("input")` |
-| Reset (`Backspace`) | recrée le `World` local | `room.send("reset")` (dev only) |
-| Joueurs | 2-4 sur le même clavier | 1 par onglet |
+| `stepWorld` | client (60 Hz fixed-step) | serveur uniquement, prédiction locale (Phase 7) |
+| Inputs | mappés sur 2-4 slots clavier | seul P1 (`←/→/↑/↓/Espace/J/K`) → `room.send("input")` (gated par phase) |
+| Reset (`Backspace`) | recrée le `World` local | `room.send("reset")` (dev only, gated par phase) |
+| Joueurs | 2-4 sur le même clavier | 1 par onglet, jusqu'à 6 par room |
 | Map | `arena-01` (2P) ou `arena-02` (≥3P) | `arena-01` |
-| HUD badge | « local — N players » | « connecting… » → « online — N players » → « error: … » |
+| HUD badge | « local — N players » | « `<CODE>` · `<phase>` · p1 N / p2 N (to 3) » |
+| Score / fin de match | absent | `wins` MapSchema, `targetWins=3`, écran match-end auto retour lobby |
 
 URL serveur :
 

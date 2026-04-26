@@ -10,7 +10,7 @@ Clone fonctionnel de **TowerFall** — jeu d'action 2D pixel art, multijoueur en
 - **Front (client PixiJS + Vite)** : <https://arrowfall-ten.vercel.app>
 - **Back (Colyseus on Fly.io, region `cdg`)** : <https://arrowfall-server.fly.dev>
 
-> ✅ Phase 6 (mai 2026) : la sync Colyseus est désormais opérationnelle (server et client alignés sur 0.16). Voir la section [Phase 6](#phase-6--colyseus-sync-naïve) plus bas.
+> ✅ Phase 8 (avril 2026) : lobby + codes de room 4 lettres + écran fin de round/match. Un menu d'accueil HTML accueille les joueurs : Hot-seat / Host / Join. Voir [Phase 8](#phase-8--lobby--codes-de-room--fin-de-roundmatch) plus bas.
 
 ## Stack
 
@@ -127,6 +127,43 @@ Les bindings utilisent `event.code` (layout-independent — `KeyA` = position ph
 |---|---|
 
 P3 (vert) et P4 (jaune) sont câblés (Numpad et `[ ] ; ' / \ .`) mais **non validés ergonomiquement** : au-delà de 2 joueurs, les claviers physiques ont du **N-key rollover** limité (anti-ghost matrices) — plusieurs touches simultanées peuvent être ignorées. Les manettes en Phase 11 résoudront ce problème proprement. Tirer sans direction = horizontal vers le facing de l'archer ; combiner directions + tir = visée 8 directions (rappel spec §4.1). La fenêtre d'iframe du dodge sert aussi à catch les flèches (rappel spec §2.4). Les flèches qui sortent par la droite réapparaissent à gauche (wrap continu, spec §5.2).
+
+## Phase 8 — Lobby + codes de room + fin de round/match
+
+Le boot du client affiche désormais un **menu HTML** par défaut : trois entrées, **Hot-seat** (local 1-4P), **Host a room** (génère un code 4 lettres), **Join with code** (rejoindre par code). Une fois 2 joueurs prêts dans le lobby, le match démarre — le premier à 3 wins remporte la partie. Les rounds enchaînent automatiquement avec un freeze de 3 s après chaque kill (le winner est tinté à sa couleur), et un écran de victoire de 6 s à la fin du match avant retour au lobby.
+
+| Écran | Contenu |
+|---|---|
+| Start | 3 boutons (Local / Host / Join) |
+| Join form | input 4 lettres, validation client (alphabet sans I/O) |
+| Lobby | code de room en gros, roster avec ready toggle, bouton « Ready up » |
+| Round-end | overlay Pixi « PX wins! » tinté à la couleur du gagnant (3 s) |
+| Match-end | overlay HTML « X wins! », scores finaux, countdown retour lobby (6 s) |
+
+Mid-round, un nouveau joueur reste en queue et apparaît au prochain round (pas de reset des positions) ; un quitteur est instantanément forfait (`alive=false` en place) — si ça réduit le compte à 1 alive, le round se ferme et son score est conservé.
+
+```bash
+# 1. Lance le serveur Colyseus (port 2567)
+pnpm --filter @arrowfall/server dev
+
+# 2. Lance le client Vite (port 5173)
+pnpm --filter @arrowfall/client dev
+
+# 3. Tab A : http://localhost:5173/  → Host → note le code (ex. XQRP)
+# 4. Tab B : http://localhost:5173/  → Join → tape XQRP
+# 5. Les 2 cliquent Ready → le match démarre.
+```
+
+Shortcuts URL pour skip le menu (dev) :
+
+```
+?local=1     → hot-seat direct
+?host=1      → host direct (code généré)
+?join=ABCD   → rejoindre direct
+?net=1       → alias legacy de ?host=1 (Phase 6 quick-play)
+```
+
+Détails : [`packages/server/README.md`](./packages/server/README.md) (machine d'états + room codes), [`packages/client/README.md`](./packages/client/README.md) (menu HTML + flow).
 
 ## Phase 6 — Colyseus sync naïve
 

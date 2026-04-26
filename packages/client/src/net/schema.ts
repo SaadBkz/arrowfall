@@ -105,6 +105,18 @@ export class MatchState extends Schema {
   declare arrows: ArraySchema<ArrowState>;
   declare lastInputTick: MapSchema<number>;
 
+  // Phase 8 — lobby + match flow. See packages/server/src/state/match-state.ts
+  // for the field-by-field contract; the schemas MUST stay in lockstep.
+  declare roomCode: string;
+  declare phase: string;
+  declare phaseTimer: number;
+  declare roundNumber: number;
+  declare targetWins: number;
+  declare wins: MapSchema<number>;
+  declare ready: MapSchema<boolean>;
+  declare roundWinnerSessionId: string;
+  declare matchWinnerSessionId: string;
+
   constructor() {
     super();
     this.tick = 0;
@@ -112,6 +124,16 @@ export class MatchState extends Schema {
     this.archers = new MapSchema<ArcherState>();
     this.arrows = new ArraySchema<ArrowState>();
     this.lastInputTick = new MapSchema<number>();
+
+    this.roomCode = "";
+    this.phase = "lobby";
+    this.phaseTimer = 0;
+    this.roundNumber = 0;
+    this.targetWins = 3;
+    this.wins = new MapSchema<number>();
+    this.ready = new MapSchema<boolean>();
+    this.roundWinnerSessionId = "";
+    this.matchWinnerSessionId = "";
   }
 }
 
@@ -121,4 +143,27 @@ defineTypes(MatchState, {
   archers: { map: ArcherState },
   arrows: [ArrowState],
   lastInputTick: { map: "uint32" },
+
+  roomCode: "string",
+  phase: "string",
+  phaseTimer: "uint16",
+  roundNumber: "uint8",
+  targetWins: "uint8",
+  wins: { map: "uint8" },
+  ready: { map: "boolean" },
+  roundWinnerSessionId: "string",
+  matchWinnerSessionId: "string",
 });
+
+// Discriminated union of phases — mirrors the server's `phase` strings.
+// Use isPhase() in the client to narrow before reading.
+export type MatchPhase = "lobby" | "playing" | "round-end" | "match-end";
+
+const KNOWN_PHASES: ReadonlySet<string> = new Set([
+  "lobby",
+  "playing",
+  "round-end",
+  "match-end",
+]);
+
+export const isMatchPhase = (raw: string): raw is MatchPhase => KNOWN_PHASES.has(raw);

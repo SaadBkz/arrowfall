@@ -19,3 +19,153 @@ body {
   image-rendering: crisp-edges;
   display: block;
 }
+
+/* ==== Phase 8 — menu / lobby / match-end overlay ==== */
+
+#menu-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  color: #f5f5f5;
+  font-family: monospace;
+  z-index: 10;
+}
+
+#menu-overlay.hidden {
+  display: none;
+}
+
+.menu-panel {
+  background: #1a1a1a;
+  border: 2px solid #444;
+  padding: 28px 36px;
+  min-width: 320px;
+  text-align: center;
+  box-shadow: 0 0 32px rgba(0, 0, 0, 0.6);
+}
+
+.menu-title {
+  font-size: 28px;
+  font-weight: bold;
+  margin: 0 0 18px 0;
+  letter-spacing: 2px;
+}
+
+.menu-subtitle {
+  font-size: 13px;
+  color: #aaa;
+  margin: 0 0 18px 0;
+}
+
+.menu-button {
+  display: block;
+  width: 100%;
+  margin: 8px 0;
+  padding: 10px 16px;
+  background: #2a2a2a;
+  color: #f5f5f5;
+  border: 1px solid #555;
+  font-family: monospace;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.menu-button:hover {
+  background: #3a3a3a;
+}
+
+.menu-button.primary {
+  background: #2c5d2c;
+  border-color: #4a8d4a;
+}
+
+.menu-button.primary:hover {
+  background: #3c7d3c;
+}
+
+.menu-button.danger {
+  background: #5d2c2c;
+  border-color: #8d4a4a;
+}
+
+.menu-button:disabled {
+  background: #1a1a1a;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.menu-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 8px 0;
+  padding: 10px 12px;
+  background: #2a2a2a;
+  color: #f5f5f5;
+  border: 1px solid #555;
+  font-family: monospace;
+  font-size: 18px;
+  text-align: center;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+}
+
+.menu-error {
+  color: #f87878;
+  font-size: 12px;
+  margin: 8px 0;
+  min-height: 14px;
+}
+
+.menu-status {
+  color: #aaa;
+  font-size: 12px;
+  margin: 8px 0;
+  min-height: 14px;
+}
+
+.lobby-code {
+  font-size: 36px;
+  font-weight: bold;
+  letter-spacing: 12px;
+  color: #f5d76e;
+  margin: 6px 0 16px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.lobby-roster {
+  margin: 12px 0;
+  text-align: left;
+  font-size: 13px;
+  border: 1px solid #333;
+  padding: 8px;
+  background: #111;
+}
+
+.lobby-roster .row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.lobby-roster .row .ready {
+  color: #4a8d4a;
+}
+
+.lobby-roster .row .not-ready {
+  color: #777;
+}
+
+.match-end .winner {
+  font-size: 22px;
+  font-weight: bold;
+  margin: 12px 0 4px 0;
+}
+
+.match-end .scores {
+  font-size: 13px;
+  color: #aaa;
+  margin: 0 0 12px 0;
+}

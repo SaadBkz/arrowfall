@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { type Client } from "colyseus";
 import { type ArcherInput, NEUTRAL_INPUT } from "@arrowfall/shared";
 import { ArenaRoom } from "./arena-room.js";
+import { _resetRoomCodesForTest } from "./room-codes.js";
 
 // Minimal Client mock — onJoin / onLeave only read sessionId. Cast
 // as `Client` because the full interface has dozens of fields we
@@ -12,6 +13,10 @@ const fakeClient = (sessionId: string): Client => ({ sessionId }) as unknown as 
 // paused by default (the framework calls clock.start() during
 // listen()), so setSimulationInterval / setPatchRate are registered
 // but never fire. We tick manually via room.tickForTest().
+//
+// Phase 8 — onCreate now reserves a room code, so tests need to clear
+// the registry between each (afterEach) to avoid accidental leakage
+// when a test relies on a specific code.
 const newRoom = (): ArenaRoom => {
   const room = new ArenaRoom();
   room.onCreate({});
@@ -30,12 +35,24 @@ afterEach(async () => {
       // ignore — some rooms aren't fully wired in tests
     }
   }
+  // Disconnecting a room obtained via `new ArenaRoom()` does not run
+  // onDispose (it would have if the matchmaker had created the room).
+  // Free codes manually so the registry doesn't grow across tests.
+  _resetRoomCodesForTest();
 });
 
 const setup = (): ArenaRoom => {
   const r = newRoom();
   rooms.push(r);
   return r;
+};
+
+// Phase 6/7 tests assumed the world simulated immediately. Phase 8
+// adds a lobby gate; these older tests opt out by jumping the room
+// straight to "playing". New Phase 8 tests live in arena-flow.test.ts
+// and exercise the lobby/round/match transitions explicitly.
+const startPlaying = (room: ArenaRoom): void => {
+  room.forceStartMatchForTest();
 };
 
 describe("ArenaRoom", () => {
@@ -77,6 +94,8 @@ describe("ArenaRoom", () => {
   it("buffered input moves the archer when simulate runs", () => {
     const room = setup();
     room.onJoin(fakeClient("a"), {});
+    room.onJoin(fakeClient("b"), {});
+    startPlaying(room);
     const startX = room.getWorldForTest().archers.get("p1")!.pos.x;
 
     const right: ArcherInput = { ...NEUTRAL_INPUT, right: true };
@@ -99,6 +118,8 @@ describe("ArenaRoom", () => {
   it("malformed input payloads are silently neutralized (no archer movement)", () => {
     const room = setup();
     room.onJoin(fakeClient("a"), {});
+    room.onJoin(fakeClient("b"), {});
+    startPlaying(room);
     const startX = room.getWorldForTest().archers.get("p1")!.pos.x;
 
     // Garbage payload — should be coerced to NEUTRAL_INPUT.
@@ -132,6 +153,8 @@ describe("ArenaRoom", () => {
   it("simulate increments tick on each call", () => {
     const room = setup();
     room.onJoin(fakeClient("a"), {});
+    room.onJoin(fakeClient("b"), {});
+    startPlaying(room);
     const t0 = room.state.tick;
     room.tickForTest();
     expect(room.state.tick).toBe(t0 + 1);
@@ -142,6 +165,8 @@ describe("ArenaRoom", () => {
   it("mirrors the latest clientTick from input payloads into state.lastInputTick", () => {
     const room = setup();
     room.onJoin(fakeClient("a"), {});
+    room.onJoin(fakeClient("b"), {});
+    startPlaying(room);
     room.handleInput("a", { ...NEUTRAL_INPUT, clientTick: 5 });
     room.tickForTest();
     expect(room.state.lastInputTick.get("a")).toBe(5);
@@ -154,6 +179,8 @@ describe("ArenaRoom", () => {
   it("ignores out-of-order clientTicks (monotonic per session)", () => {
     const room = setup();
     room.onJoin(fakeClient("a"), {});
+    room.onJoin(fakeClient("b"), {});
+    startPlaying(room);
     room.handleInput("a", { ...NEUTRAL_INPUT, clientTick: 10 });
     room.tickForTest();
     expect(room.state.lastInputTick.get("a")).toBe(10);
@@ -167,6 +194,8 @@ describe("ArenaRoom", () => {
   it("does not advance lastInputTick on a malformed payload", () => {
     const room = setup();
     room.onJoin(fakeClient("a"), {});
+    room.onJoin(fakeClient("b"), {});
+    startPlaying(room);
     room.handleInput("a", { ...NEUTRAL_INPUT, clientTick: 4 });
     room.tickForTest();
     expect(room.state.lastInputTick.get("a")).toBe(4);
@@ -180,6 +209,8 @@ describe("ArenaRoom", () => {
   it("drops state.lastInputTick when the session leaves", () => {
     const room = setup();
     room.onJoin(fakeClient("a"), {});
+    room.onJoin(fakeClient("b"), {});
+    startPlaying(room);
     room.handleInput("a", { ...NEUTRAL_INPUT, clientTick: 11 });
     room.tickForTest();
     expect(room.state.lastInputTick.has("a")).toBe(true);
