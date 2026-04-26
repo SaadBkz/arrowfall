@@ -47,6 +47,8 @@ const explodingBomb = (cx: number, cy: number, ownerId: string): Arrow => ({
   status: "exploding",
   age: 60,
   groundedTimer: 0,
+  piercesUsed: 0,
+  bouncesUsed: 0,
 });
 
 const buildWorld = (overrides: Partial<World> = {}): World => {

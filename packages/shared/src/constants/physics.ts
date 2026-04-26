@@ -58,13 +58,28 @@ export const BOMB_FUSE_FRAMES = 60; // 1 s before auto-detonation
 export const BOMB_RADIUS_PX = 24; // half-width of the explosion AABB
 export const EXPLOSION_FX_FRAMES = 18; // visual-only, server doesn't track this
 
-// §6 Treasure chests (Phase 9a).
+// §4.2 Drill arrow (Phase 9b). Same muzzle speed as a normal arrow but
+// passes through exactly one SOLID tile before grounding/embedding on
+// the next impact.
+export const DRILL_ARROW_SPEED = 5.0; // px/frame
+export const DRILL_MAX_PIERCES = 1; // tiles traversed before final impact
+
+// §4.2 Laser arrow (Phase 9b). No gravity, fast, bounces up to
+// LASER_MAX_BOUNCES times before disappearing; also disappears after
+// LASER_LIFETIME_FRAMES regardless of bounce count.
+export const LASER_ARROW_SPEED = 7.0; // px/frame
+export const LASER_MAX_BOUNCES = 7;
+export const LASER_LIFETIME_FRAMES = 30;
+
+// §6 Treasure chests (Phase 9a–9b).
 export const CHEST_OPEN_DURATION_FRAMES = 30; // contact → opening anim
 // Loot drops are added directly to the opener's inventory rather than
 // ejected as flying arrows — simpler and avoids a second collision pass.
 // Spec §6.2 contents (probabilités MVP).
 export const CHEST_BOMB_LOOT_COUNT = 2;
 export const CHEST_NORMAL_LOOT_COUNT = 2;
+export const CHEST_DRILL_LOOT_COUNT = 2;
+export const CHEST_LASER_LOOT_COUNT = 2;
 // Spawn cadence (server-side, see ChestSpawner). Inclusive bounds.
 export const CHEST_SPAWN_MIN_INTERVAL_FRAMES = 240; // 4 s
 export const CHEST_SPAWN_MAX_INTERVAL_FRAMES = 480; // 8 s

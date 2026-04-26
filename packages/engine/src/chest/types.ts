@@ -1,5 +1,4 @@
-import { type AABB, type Vec2 } from "@arrowfall/shared";
-import { type ArrowType } from "../arrow/types.js";
+import { type AABB, type ArrowType, type Vec2 } from "@arrowfall/shared";
 
 // Phase 9a — treasure chests (spec §6).
 //
@@ -14,15 +13,21 @@ import { type ArrowType } from "../arrow/types.js";
 //              the chest from the array.
 export type ChestStatus = "closed" | "opening" | "opened";
 
-// Contents are decided server-side at spawn time (loot table + RNG)
-// so the engine stays deterministic. For Phase 9a we ship a single
-// ArrowType + count payload — Phase 9b adds shield support via either
-// an extra optional flag here or a discriminated union, depending on
-// what the wire schema is most painful to extend.
-export type ChestContents = {
+// Phase 9b — chest contents are a discriminated union: arrows (any
+// ArrowType + count) OR a shield. Decided server-side at spawn time
+// (loot table + RNG), so the engine stays deterministic. The wire
+// schema flattens this into `lootKind` ("arrows" | "shield") +
+// `lootType` (ArrowType, ignored when kind="shield") + `lootCount`
+// (ignored when kind="shield").
+export type ChestArrowContents = {
+  readonly kind: "arrows";
   readonly type: ArrowType;
   readonly count: number;
 };
+export type ChestShieldContents = {
+  readonly kind: "shield";
+};
+export type ChestContents = ChestArrowContents | ChestShieldContents;
 
 export type Chest = {
   readonly id: string; // stable, server-assigned

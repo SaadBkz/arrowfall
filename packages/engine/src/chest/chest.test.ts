@@ -57,7 +57,7 @@ const makeChest = (overrides: Partial<Chest> = {}): Chest => ({
   status: "closed",
   openTimer: 0,
   openerId: null,
-  contents: { type: "normal", count: 2 } as ChestContents,
+  contents: { kind: "arrows", type: "normal", count: 2 } as ChestContents,
   ...overrides,
 });
 
@@ -112,7 +112,7 @@ describe("stepWorld — chest open flow", () => {
       status: "opening",
       openTimer: 1,
       openerId: "p1",
-      contents: { type: "normal", count: 2 },
+      contents: { kind: "arrows", type: "normal", count: 2 },
     });
     let w = buildWorld(chest);
     const startInv = w.archers.get("p1")!.inventory;
@@ -129,7 +129,7 @@ describe("stepWorld — chest open flow", () => {
       status: "opening",
       openTimer: 1,
       openerId: "p1",
-      contents: { type: "bomb", count: 2 },
+      contents: { kind: "arrows", type: "bomb", count: 2 },
     });
     let w = buildWorld(chest);
     const startBombs = w.archers.get("p1")!.bombInventory;
@@ -145,7 +145,7 @@ describe("stepWorld — chest open flow", () => {
       status: "opening",
       openTimer: 1,
       openerId: "ghost", // never existed in the world
-      contents: { type: "normal", count: 2 },
+      contents: { kind: "arrows", type: "normal", count: 2 },
     });
     const w = buildWorld(chest);
     const next = stepWorld(w, new Map());

@@ -3,11 +3,15 @@ import { type Archer } from "../archer/types.js";
 import { type Arrow } from "../arrow/types.js";
 import { type Chest } from "../chest/types.js";
 
-// Reasons an archer can die. SPIKE is wired up alongside arrow/stomp so
-// the union is closed for Phase 3 callers, even if SPIKE handling is a
-// thin pass-through (see notes in step.ts). Phase 9a adds 'bomb' for
-// archers caught in an explosion radius.
+// Reasons an archer can die / a shield can break. SPIKE is wired up
+// alongside arrow/stomp so the union is closed for callers, even if
+// SPIKE handling is a thin pass-through. Phase 9a added 'bomb';
+// Phase 9b adds no new causes (shield-broken reuses arrow/bomb/stomp).
 export type ArcherKillCause = "arrow" | "stomp" | "spike" | "bomb";
+
+// Shield-broken cause is a subset of kill-causes — only damage sources
+// that *could* have killed the archer can break a shield.
+export type ShieldBreakCause = "arrow" | "bomb" | "stomp";
 
 // One-shot events emitted *for the current frame only*. Renderer / netcode
 // consumes them to play SFX, spawn particles, update HUD; they do NOT
@@ -38,10 +42,7 @@ export type WorldEvent =
       readonly pickerId: string;
       readonly tick: number;
     }
-  // Phase 9a — Bomb arrow exploded. The center is the arrow's position
-  // at the moment of the blast; the radius lives in shared constants
-  // (BOMB_RADIUS_PX). Renderer plays the FX; netcode mirrors the event
-  // for cross-client SFX.
+  // Phase 9a — Bomb arrow exploded.
   | {
       readonly kind: "bomb-exploded";
       readonly arrowId: string;
@@ -50,15 +51,22 @@ export type WorldEvent =
       readonly y: number;
       readonly tick: number;
     }
-  // Phase 9a — Chest opened. Loot has just been delivered to the
-  // opener's inventory. Renderer plays the open animation + a small
-  // "+N <type>" pickup toast (optional).
+  // Phase 9a — Chest opened.
   | {
       readonly kind: "chest-opened";
       readonly chestId: string;
       readonly openerId: string;
       readonly x: number;
       readonly y: number;
+      readonly tick: number;
+    }
+  // Phase 9b — Shield consumed an otherwise-lethal hit. The archer
+  // survived; the renderer should play a "shield shatter" FX. No
+  // killerId since the archer didn't die — only the shield broke.
+  | {
+      readonly kind: "shield-broken";
+      readonly victimId: string;
+      readonly cause: ShieldBreakCause;
       readonly tick: number;
     };
 

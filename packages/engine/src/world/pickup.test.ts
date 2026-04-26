@@ -59,6 +59,8 @@ const groundedArrow = (
   status: "grounded",
   age: 100,
   groundedTimer,
+  piercesUsed: 0,
+  bouncesUsed: 0,
 });
 
 describe("stepWorld — pickup", () => {
