@@ -226,4 +226,10 @@ export const archerFromSnapshot = (snap: ArcherSnapshot): Archer => ({
   alive: snap.alive,
   deathTimer: snap.deathTimer,
   spawnIframeTimer: snap.spawnIframeTimer,
+  // Phase 9a — bombInventory not interpolated (it's a discrete count
+  // visible only to its owner via the HUD; interpolating it would
+  // introduce phantom bomb counts mid-flight). Defaults to 0 in the
+  // remote rendering — the local archer's bombInventory comes from
+  // the predicted world, not the interpolated snapshot.
+  bombInventory: 0,
 });

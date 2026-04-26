@@ -31,6 +31,9 @@ export class ArcherState extends Schema {
   declare deathTimer: number;
   declare spawnIframeTimer: number;
   declare dodgeIframeTimer: number;
+  // Phase 9a — bomb arrows held (separate counter from `inventory`,
+  // which is normal arrows only).
+  declare bombInventory: number;
 
   constructor() {
     super();
@@ -46,6 +49,7 @@ export class ArcherState extends Schema {
     this.deathTimer = 0;
     this.spawnIframeTimer = 0;
     this.dodgeIframeTimer = 0;
+    this.bombInventory = 0;
   }
 }
 
@@ -62,6 +66,7 @@ defineTypes(ArcherState, {
   deathTimer: "uint16",
   spawnIframeTimer: "uint16",
   dodgeIframeTimer: "uint16",
+  bombInventory: "uint8",
 });
 
 export class ArrowState extends Schema {
@@ -73,6 +78,8 @@ export class ArrowState extends Schema {
   declare ownerId: string;
   declare status: string;
   declare groundedTimer: number;
+  // Phase 9a — "normal" | "bomb" (drives the renderer sprite + tint).
+  declare arrowType: string;
 
   constructor() {
     super();
@@ -84,6 +91,7 @@ export class ArrowState extends Schema {
     this.ownerId = "";
     this.status = "flying";
     this.groundedTimer = 0;
+    this.arrowType = "normal";
   }
 }
 
@@ -96,6 +104,42 @@ defineTypes(ArrowState, {
   ownerId: "string",
   status: "string",
   groundedTimer: "uint16",
+  arrowType: "string",
+});
+
+// Phase 9a — chest mirror (matches server/src/state/chest-state.ts).
+export class ChestState extends Schema {
+  declare id: string;
+  declare posX: number;
+  declare posY: number;
+  declare status: string;
+  declare openTimer: number;
+  declare openerId: string;
+  declare lootType: string;
+  declare lootCount: number;
+
+  constructor() {
+    super();
+    this.id = "";
+    this.posX = 0;
+    this.posY = 0;
+    this.status = "closed";
+    this.openTimer = 0;
+    this.openerId = "";
+    this.lootType = "normal";
+    this.lootCount = 0;
+  }
+}
+
+defineTypes(ChestState, {
+  id: "string",
+  posX: "number",
+  posY: "number",
+  status: "string",
+  openTimer: "uint16",
+  openerId: "string",
+  lootType: "string",
+  lootCount: "uint8",
 });
 
 export class MatchState extends Schema {
@@ -104,6 +148,8 @@ export class MatchState extends Schema {
   declare archers: MapSchema<ArcherState>;
   declare arrows: ArraySchema<ArrowState>;
   declare lastInputTick: MapSchema<number>;
+  // Phase 9a.
+  declare chests: ArraySchema<ChestState>;
 
   // Phase 8 — lobby + match flow. See packages/server/src/state/match-state.ts
   // for the field-by-field contract; the schemas MUST stay in lockstep.
@@ -124,6 +170,7 @@ export class MatchState extends Schema {
     this.archers = new MapSchema<ArcherState>();
     this.arrows = new ArraySchema<ArrowState>();
     this.lastInputTick = new MapSchema<number>();
+    this.chests = new ArraySchema<ChestState>();
 
     this.roomCode = "";
     this.phase = "lobby";
@@ -143,6 +190,7 @@ defineTypes(MatchState, {
   archers: { map: ArcherState },
   arrows: [ArrowState],
   lastInputTick: { map: "uint32" },
+  chests: [ChestState],
 
   roomCode: "string",
   phase: "string",

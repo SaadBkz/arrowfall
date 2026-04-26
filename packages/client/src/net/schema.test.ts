@@ -30,4 +30,10 @@ describe("MatchState defaults", () => {
     expect(s.wins.size).toBe(0);
     expect(s.ready.size).toBe(0);
   });
+
+  it("Phase 9a — chests array starts empty", () => {
+    const s = new MatchState();
+    expect(s.chests).toBeDefined();
+    expect(s.chests.length).toBe(0);
+  });
 });

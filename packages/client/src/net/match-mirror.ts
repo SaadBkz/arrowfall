@@ -1,6 +1,14 @@
-import { ARCHER_HITBOX_H, type Archer, type Arrow, type World } from "@arrowfall/engine";
+import {
+  ARCHER_HITBOX_H,
+  type Archer,
+  type Arrow,
+  type ArrowType,
+  type Chest,
+  type ChestStatus,
+  type World,
+} from "@arrowfall/engine";
 import type { MapData } from "@arrowfall/shared";
-import type { ArcherState, ArrowState, MatchState } from "./schema.js";
+import type { ArcherState, ArrowState, ChestState, MatchState } from "./schema.js";
 
 // Translate the wire schema into the engine's `World` shape so the
 // existing Phase 4-5 renderers (archer.ts, arrow.ts, hud.ts,
@@ -35,11 +43,15 @@ const archerFromState = (s: ArcherState): Archer => ({
   alive: s.alive,
   deathTimer: s.deathTimer,
   spawnIframeTimer: s.spawnIframeTimer,
+  bombInventory: s.bombInventory,
 });
+
+const arrowTypeFromState = (raw: string): ArrowType =>
+  raw === "bomb" ? "bomb" : "normal";
 
 const arrowFromState = (s: ArrowState): Arrow => ({
   id: s.id,
-  type: "normal",
+  type: arrowTypeFromState(s.arrowType),
   pos: { x: s.posX, y: s.posY },
   vel: { x: s.velX, y: s.velY },
   ownerId: s.ownerId,
@@ -47,9 +59,23 @@ const arrowFromState = (s: ArrowState): Arrow => ({
     ? "grounded"
     : s.status === "embedded"
       ? "embedded"
-      : "flying") as Arrow["status"],
+      : s.status === "exploding"
+        ? "exploding"
+        : "flying") as Arrow["status"],
   age: 0,
   groundedTimer: s.groundedTimer,
+});
+
+const chestStatusFromState = (raw: string): ChestStatus =>
+  raw === "opening" ? "opening" : raw === "opened" ? "opened" : "closed";
+
+const chestFromState = (s: ChestState): Chest => ({
+  id: s.id,
+  pos: { x: s.posX, y: s.posY },
+  status: chestStatusFromState(s.status),
+  openTimer: s.openTimer,
+  openerId: s.openerId === "" ? null : s.openerId,
+  contents: { type: arrowTypeFromState(s.lootType), count: s.lootCount },
 });
 
 // Reads the schema synchronously and produces a fresh World. Cheap
@@ -74,10 +100,15 @@ export const matchStateToWorld = (
   state.arrows.forEach((arrowSt: ArrowState) => {
     arrows.push(arrowFromState(arrowSt));
   });
+  const chests: Chest[] = [];
+  state.chests.forEach((chestSt: ChestState) => {
+    chests.push(chestFromState(chestSt));
+  });
   return {
     map: mapData,
     archers,
     arrows,
+    chests,
     tick: state.tick,
     events: [],
   };
