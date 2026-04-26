@@ -146,3 +146,36 @@ Quand cette variable d'env Vite vaut `"1"` au build, le client retombe sur les *
 2. Les 6 archers sont distinguables d'un coup d'œil à 4 joueurs simultanés.
 3. Les flèches restent lisibles en mouvement rapide (vol + impact).
 4. Aucune régression gameplay vs Phase 9b.
+
+## 11. Cadre, vignette, brume (Phase 10.5.a)
+
+L'arène garde son canvas logique de 480×270 inchangé pour le gameplay.
+Le viewport rendu est étendu à **544×270** (32 px de gouttière de chaque côté) ; la `playfield` Container est offset à `x = 32` et contient toutes les couches gameplay. Les panneaux décoratifs vivent dans les 32 px externes — aucun pixel d'arène n'est masqué.
+
+### 11.1 Frame panels — 32 × 270 par côté, par thème
+
+Trois sources visuelles :
+- Sacred Grove : pierre verte mossy + bandeau bois clair en cap haut/bas, 2 mascarons leaf-crowned, vignes en bord intérieur, mousse alpha 0.55 scattered.
+- Twin Spires : pierre froide marbre + neige en cap, icicles sous le cap, bannière rouge centrale (12×54) avec sigil sun gold, flocons sparse.
+- Old Temple : pierre violette + courses 14 px denses, bordure or extérieure, 2 mascarons mayans 24×30 (yeux orange glowing, fanged mouth), runes circle/spiral sur 8 lignes, embers orange floating.
+
+Chaque panel : pipeline base gradient → courses horizontales → cap top/bottom → ornements thème → ombre dure 3 px sur l'arête intérieure (face à l'arène) + highlight 1 px sur l'arête extérieure → détails procéduraux PRNG seedés `(theme, side)` pour figer entre rebuilds.
+
+### 11.2 Vignette — 480 × 270 RGBA
+
+Texture unique (pas par thème) : alpha 0 au centre → smoothstep → `VIGNETTE_MAX_ALPHA = 0.55` aux 4 coins. Inner radius `0.35 × halfDiag`, outer radius `1.0 × halfDiag`. Bake une seule fois au boot via Canvas radial gradient. Z-order : juste sous HUD/round-message pour ne pas occulter le texte.
+
+### 11.3 Fog — 256 × 270 tileable, par thème
+
+Value-noise 2 octaves (lattice 32×48 + 12×16) avec smoothstep, tinte par thème (Sacred = pale moss-cream, Spires = bright snow, Temple = warm orange ember), seuil 0.45 + falloff vertical sin(π·y/H) pour épaissir la brume au milieu. `TilingSprite` drift `tilePosition.x = -tick × 0.18` → cosmétique, indépendant du gameplay. Alpha cap 0.09–0.12 selon le thème.
+
+### 11.4 Z-order final dans `playfield`
+
+```
+background → decorations.back → tilemap → decorations.front
+  → arrows → chests → archers → fog → vignette → hud → roundMessage
+```
+
+### 11.5 Performance
+
+Painters ajoutés : 3 themes × 2 frame panels (32×270) + 3 themes × 1 fog (256×270) + 1 vignette (480×270) ≈ +260k pixels canvas au boot. Mesuré : ~80 ms supplémentaires sur le cold start (~230 ms total). Steady-state : 2 sprites + 1 TilingSprite + 1 Sprite vignette par frame, négligeable.

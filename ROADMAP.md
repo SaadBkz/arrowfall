@@ -18,7 +18,53 @@
 | **9a** | Coffres + flèche Bomb (loot + explosion) | match avec coffres et explosions | ✅ |
 | **9b** | Flèches Drill + Laser + Shield (mécaniques restantes) | mécaniques complètes | ✅ |
 | **10** | 3 maps designées + intégration assets pixel art CC0 | jeu visuel complet | ✅ |
+| **10.5** | Refonte du moteur visuel pour matcher TowerFall à 90-95% (5 sous-PRs a→e) | rendu fidèle screenshots | 🔄 |
 | **11** | SFX + musique CC0 + polish + gamepad + fullscreen | MVP livré | ⏳ |
+
+## Phase 10.5 — refonte du moteur visuel (en cours)
+
+Objectif : atteindre **90-95% de fidélité visuelle vs les screenshots TowerFall** (`inspirations/`), en restant **100% procédural CC0**. Découpée en 5 sous-PRs livrables séquentiellement, mergeables indépendamment.
+
+| Sous-phase | Scope | PR | Statut |
+|---|---|---|---|
+| **10.5.a** | Cadre + vignette + brume | `feat/visuals-10.5a` | 🔄 |
+| **10.5.b** | Tiles gravées chunky + props | `feat/visuals-10.5b` | ⏳ |
+| **10.5.c** | Backgrounds 3 layers + ambient particles | `feat/visuals-10.5c` | ⏳ |
+| **10.5.d** | FX events-driven (death burst, screen shake, hit-stop) | `feat/visuals-10.5d` | ⏳ |
+| **10.5.e** | Archers redessinés + HUD pictural | `feat/visuals-10.5e` | ⏳ |
+
+### Phase 10.5.a — Cadre + vignette + brume
+
+✅ Livrée dans la PR `feat/visuals-10.5a` : *(URL backfill après merge)*
+
+- **Viewport bumpé à 544×270** (`VIEWPORT_WIDTH_PX = ARENA_WIDTH_PX + FRAME_PANEL_W * 2`) — l'arène engine reste 480×270 inchangée, les 32 px de gouttière externe accueillent les frames. Une `playfield` Container offset à `x=32` contient toutes les couches gameplay → coordonnées engine inchangées (zéro impact sur la physique / le wrap / les sweeps de collision).
+- **`packages/client/src/assets/frame-painter.ts`** — `buildFrameSprites(theme)` génère 2 panneaux 32×270 par thème, anchorés top-left. Pipeline 5 étapes : base gradient stone → courses horizontales (18/24/14 px selon thème) → cap top + bottom (wood/snow/gold scrollwork) → ornements (mascarons, mascaron mayan, vignes, bannière 12×54, icicles) → ombre dure 3 px sur l'arête intérieure + highlight 1 px extérieur. Détails procéduraux PRNG seedés `(theme, side)` → figés entre rebuilds.
+- **`packages/client/src/assets/vignette-painter.ts`** — `buildVignette()` produit une seule texture 480×270 RGBA via Canvas radial gradient. Smoothstep alpha 0 (centre) → `VIGNETTE_MAX_ALPHA = 0.55` (corners), `inner = 0.35 × halfDiag`, `outer = 1.0 × halfDiag`. Helper pur `vignetteAlphaAt(x, y, w, h)` testé pour la monotonie + symétrie.
+- **`packages/client/src/assets/fog-painter.ts`** — `buildFogSprites(theme)` génère 256×270 RGBA tileable (X). Value-noise 2 octaves (lattice 32×48 + 12×16) avec smoothstep, seuil 0.45, falloff vertical `sin(π·y/H)`. Tint thème : Sacred = `text[2]`, Spires = `accent[3]`, Temple = `fire[3]`. Alpha cap 0.09–0.12. `ImageData` direct write (1 frame, ~70k pixels) au boot, jamais re-painté. Helper pur `fogValueAt(...)` testé pour determinisme + range + tileability.
+- **3 nouveaux renderers** (`packages/client/src/game/render/`) :
+  - `frame.ts` — 2 Sprites (left x=0, right x=`FRAME_PANEL_W + ARENA_WIDTH_PX`), attachés à `gameRoot` (canvas root, pas dans le playfield). `setTheme()` swap les textures.
+  - `vignette.ts` — 1 Sprite plein-playfield, attaché DANS la `playfield` Container, juste sous HUD/roundMessage. Aucune mise à jour par frame.
+  - `fog.ts` — 1 `TilingSprite` 480×270, drift `tilePosition.x = -tick × 0.18` (~10.8 px/s à 60 fps). `setTheme()` swap les textures. `update(tick)` au tick render.
+- **Z-order final dans `playfield`** :
+  ```
+  background → decorations.back → tilemap → decorations.front
+    → arrows → chests → archers → fog → vignette → hud → roundMessage
+  ```
+- **Dual-path préservé** — quand `assets === null` (`VITE_NO_SPRITES=1`), aucun des 3 renderers ne crée de Sprite (no-op `setTheme`/`update`). Les 32 px de gouttière restent dans la couleur de fond du canvas. La playfield 480×270 fonctionne identiquement Phase 4/9b.
+- **Tests** : engine 163/163 inchangé, server 75/75 inchangé, **client 109 → 120** (+11 cas dans `frame-vignette-fog.test.ts` : dimensions exposées, `vignetteAlphaAt` 0 au centre, max aux corners, monotonie centre→corner, symétrie ; `fogValueAt` déterminisme, range [0,1], tileability X, variance entre seeds).
+- **Bundle** : 247 KB → **272 KB** minifié (78 KB → **85 KB** gzippé). Delta +7 KB gz, sous le budget +30 KB de la sous-phase.
+- **Tradeoffs** :
+  - La frame est dessinée AU-DESSUS de la `playfield` Container dans le z-order de `gameRoot` mais physiquement en-dehors (pas de chevauchement). Si plus tard on veut une frame qui déborde sur l'arène pour un effet "fenêtre", il faudra ajouter une couche `frameForeground` au-dessus du HUD.
+  - Le renderer Fog drift indépendamment des autres layers (offset `tick × 0.18` au lieu de partager le tick avec background). Choix volontaire — la brume bouge plus lentement que le parallax mid pour ne pas créer un moiré visuel.
+  - Pas encore de variation de la brume par condition de jeu (état alive count, round-end). Phase 10.5.d ajoutera des cosmétiques events-driven.
+- **Validation manuelle** (à exécuter au merge) :
+  1. `pnpm --filter @arrowfall/client dev` → `http://localhost:5173`
+  2. Mode local → on atterrit sur Sacred Grove. Vérifier : panneaux verts mossy à gauche/droite (bois cap top/bottom, mascarons leaf-crowned), vignette qui assombrit les coins, brume verte pâle drifting lentement.
+  3. Toucher `M` → bascule sur Twin Spires. Vérifier : panneaux pierre froide avec bannière rouge centrale, neige + icicles en cap, vignette + brume blanche.
+  4. Toucher `M` → Old Temple. Vérifier : panneaux violets avec mascarons mayans (yeux orange), bordure or, runes scattered, brume orange ember.
+  5. `VITE_NO_SPRITES=1 pnpm --filter @arrowfall/client dev` → fallback : pas de frame, pas de vignette, pas de brume. Gouttière 32 px noire de chaque côté du gameplay.
+  6. Vérifier qu'aucun gameplay ne se passe sous les frames (les archers wrap au seam à `x=480` côté playfield, pas à `x=512` côté canvas — ce qui est correct).
+  7. Engine 163, server 75, client 120 verts.
 
 ## Phase 10 — 3 maps designées + assets pixel art CC0 (terminé)
 
