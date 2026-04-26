@@ -23,6 +23,7 @@ import { ArchersRenderer } from "./render/archer.js";
 import { ArrowsRenderer } from "./render/arrow.js";
 import { BackgroundRenderer } from "./render/background.js";
 import { ChestsRenderer } from "./render/chest.js";
+import { DecorationsRenderer } from "./render/decorations.js";
 import { HudRenderer } from "./render/hud.js";
 import { RoundMessageRenderer } from "./render/round-message.js";
 import { TilemapRenderer } from "./render/tilemap.js";
@@ -90,6 +91,7 @@ export class Game {
   private readonly gameRoot: Container;
   private readonly background: BackgroundRenderer;
   private tilemap: TilemapRenderer;
+  private readonly decorations: DecorationsRenderer;
   private readonly archers: ArchersRenderer;
   private readonly arrows: ArrowsRenderer;
   private readonly chests: ChestsRenderer;
@@ -192,8 +194,20 @@ export class Game {
     this.background.setTheme(this.mapData.theme);
     this.gameRoot.addChild(this.background.view);
 
+    // Decorations live in TWO layers around the tilemap:
+    //   back  → giant idols and floating sigils (atmosphere)
+    //   front → torches, banners, chains, stalactites (foreground)
+    // We add the back container before the tilemap and the front
+    // container after, so the tilemap reads as the gameplay surface
+    // sandwiched between ambience.
+    this.decorations = new DecorationsRenderer(this.assets);
+    this.gameRoot.addChild(this.decorations.back);
+
     this.tilemap = new TilemapRenderer(this.mapData, this.assets);
     this.gameRoot.addChild(this.tilemap.view);
+
+    this.gameRoot.addChild(this.decorations.front);
+    this.decorations.setMap(this.mapData);
 
     this.arrows = new ArrowsRenderer(this.assets);
     this.gameRoot.addChild(this.arrows.view);
@@ -252,7 +266,10 @@ export class Game {
     // bindings or trigger preventDefault.
     if (this.mode === "local") {
       this.cycleMapHandler = (e: KeyboardEvent): void => {
-        if (e.code === "KeyM" && !e.repeat) {
+        // Match the printed letter (event.key) instead of the physical
+        // position (event.code). On AZERTY, "KeyM" is the comma key —
+        // the user looks for the visible M, not the QWERTY position.
+        if (e.key.toLowerCase() === "m" && !e.repeat) {
           this.cycleThemedMap();
         }
       };
@@ -280,10 +297,13 @@ export class Game {
     this.gameRoot.removeChild(this.tilemap.view);
     this.tilemap.dispose();
     this.tilemap = new TilemapRenderer(next, this.assets);
-    // Re-insert at the right z-position (just above the background).
-    this.gameRoot.addChildAt(this.tilemap.view, 1);
+    // Re-insert at the right z-position (between the back-decorations
+    // and the front-decorations layers).
+    const tilemapZ = this.gameRoot.getChildIndex(this.decorations.front);
+    this.gameRoot.addChildAt(this.tilemap.view, tilemapZ);
 
     this.background.setTheme(next.theme);
+    this.decorations.setMap(next);
     this.resetWorldLocal();
     console.log(`[arrowfall] map → ${next.id} (${next.theme})`);
   }
@@ -358,6 +378,7 @@ export class Game {
     }
     this.input.dispose();
     this.tilemap.dispose();
+    this.decorations.dispose();
     this.archers.dispose();
     this.arrows.dispose();
     this.chests.dispose();
@@ -370,13 +391,18 @@ export class Game {
   // current canvas, then centres the playfield (letterbox). Integer-only
   // keeps the pixel-art style crisp; non-integer scales would introduce
   // visible bilinear smearing despite `image-rendering: pixelated`.
+  // Phase 10 iter-2 — scaling moved to CSS upscale of the canvas
+  // DOM element (see main.ts `fitCanvas`). Pixi renders at the canonical
+  // 480×270 internal resolution; the browser does the nearest-neighbor
+  // fill of the viewport. Keeps gameRoot at scale 1 / origin (0, 0) so
+  // every renderer can position in raw logical pixels without juggling
+  // a viewport transform.
   private applyScale(): void {
-    const w = this.app.renderer.width;
-    const h = this.app.renderer.height;
-    const scale = Math.max(1, Math.floor(Math.min(w / ARENA_WIDTH_PX, h / ARENA_HEIGHT_PX)));
-    this.gameRoot.scale.set(scale, scale);
-    this.gameRoot.x = Math.floor((w - ARENA_WIDTH_PX * scale) / 2);
-    this.gameRoot.y = Math.floor((h - ARENA_HEIGHT_PX * scale) / 2);
+    this.gameRoot.scale.set(1, 1);
+    this.gameRoot.x = 0;
+    this.gameRoot.y = 0;
+    void ARENA_WIDTH_PX;
+    void ARENA_HEIGHT_PX;
   }
 
   private resetWorldLocal(): void {

@@ -1,9 +1,16 @@
-import { Application } from "pixi.js";
+import { Application, TextureSource } from "pixi.js";
+import { ARENA_HEIGHT_PX, ARENA_WIDTH_PX } from "@arrowfall/shared";
 import { Game, type GameMode } from "./game/index.js";
 import { createRoom, joinRoomByCode } from "./net/index.js";
 import { MenuOverlay } from "./ui/menu-overlay.js";
 import { buildAllAssets, type AssetRegistry } from "./assets/index.js";
 import "./style.css";
+
+// Phase 10 iter-2 — Pixel-art crisp upscale.
+// All Pixi textures default to nearest-neighbor filtering so a
+// fractional CSS upscale of the canvas stays crisp instead of
+// bilinearly smearing the pixel art.
+TextureSource.defaultOptions.scaleMode = "nearest";
 
 // Phase 8 — page boot orchestrator.
 //
@@ -22,13 +29,39 @@ const joinParam = params.get("join");
 const container = document.getElementById("game");
 if (!container) throw new Error("#game container not found");
 
+// Pixel-perfect render target: Pixi draws at the canonical 480×270
+// internal resolution, then we CSS-scale the canvas <DOM element> to
+// fill the viewport. Browser nearest-neighbor upscale keeps pixels
+// crisp at any window size — no per-frame integer letterbox math, no
+// black bars, much bigger feel on a normal 1080p/1440p display.
 const app = new Application();
 await app.init({
-  resizeTo: window,
+  width: ARENA_WIDTH_PX,
+  height: ARENA_HEIGHT_PX,
   backgroundColor: 0x000000,
   antialias: false,
+  resolution: 1,
+  autoDensity: false,
 });
 container.appendChild(app.canvas);
+
+const fitCanvas = (): void => {
+  const ratio = Math.min(
+    window.innerWidth / ARENA_WIDTH_PX,
+    window.innerHeight / ARENA_HEIGHT_PX,
+  );
+  // Cap at the largest fractional ratio that keeps aspect; CSS handles
+  // letterboxing via centered absolute positioning.
+  const w = Math.floor(ARENA_WIDTH_PX * ratio);
+  const h = Math.floor(ARENA_HEIGHT_PX * ratio);
+  app.canvas.style.width = `${w}px`;
+  app.canvas.style.height = `${h}px`;
+  app.canvas.style.position = "absolute";
+  app.canvas.style.left = `${Math.floor((window.innerWidth - w) / 2)}px`;
+  app.canvas.style.top = `${Math.floor((window.innerHeight - h) / 2)}px`;
+};
+fitCanvas();
+window.addEventListener("resize", fitCanvas);
 
 // Phase 10 — Generate every visual asset procedurally at boot. Skipped
 // when VITE_NO_SPRITES=1 (devs iterating on physics: Phase-4-style
