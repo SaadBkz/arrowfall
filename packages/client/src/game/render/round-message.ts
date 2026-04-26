@@ -1,7 +1,7 @@
 import { ARENA_HEIGHT_PX, ARENA_WIDTH_PX } from "@arrowfall/shared";
+import { type RoundOutcome } from "@arrowfall/engine";
 import { Container, Text, TextStyle } from "pixi.js";
 import { archerColorFor } from "../colors.js";
-import { type RoundOutcome } from "../round-state.js";
 
 // Centred overlay shown when a round resolves. Lives inside `gameRoot`
 // (logical 480×270 coordinates) so it scales with the rest of the view.
