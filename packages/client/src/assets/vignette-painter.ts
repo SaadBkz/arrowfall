@@ -15,9 +15,11 @@ export const VIGNETTE_H = 270;
 
 // Tunables — exposed so the render layer can also drive the alpha if
 // we ever want a punch-in effect (not used in 10.5.a).
-export const VIGNETTE_INNER_RADIUS_FRACT = 0.35; // 0..1 of half-diagonal
+export const VIGNETTE_INNER_RADIUS_FRACT = 0.45; // 0..1 of half-diagonal
 export const VIGNETTE_OUTER_RADIUS_FRACT = 1.0;
-export const VIGNETTE_MAX_ALPHA = 0.55;
+// Phase 10.5b — toned 0.55 → 0.32 to keep the corners darker than
+// the centre without the previous "everything muddy" feel.
+export const VIGNETTE_MAX_ALPHA = 0.32;
 
 // Pure helper: returns the alpha (0..1) at logical pixel (x, y) for a
 // canvas of size (w, h). Exposed for tests so we can verify the

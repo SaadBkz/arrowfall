@@ -18,20 +18,39 @@
 | **9a** | Coffres + flèche Bomb (loot + explosion) | match avec coffres et explosions | ✅ |
 | **9b** | Flèches Drill + Laser + Shield (mécaniques restantes) | mécaniques complètes | ✅ |
 | **10** | 3 maps designées + intégration assets pixel art CC0 | jeu visuel complet | ✅ |
-| **10.5** | Refonte du moteur visuel pour matcher TowerFall à 90-95% (5 sous-PRs a→e) | rendu fidèle screenshots | 🔄 |
+| **10.5** | Refonte du moteur visuel pour matcher TowerFall (pivot CC0 pack après itération a/b) | rendu fidèle screenshots | 🔄 |
 | **11** | SFX + musique CC0 + polish + gamepad + fullscreen | MVP livré | ⏳ |
 
 ## Phase 10.5 — refonte du moteur visuel (en cours)
 
-Objectif : atteindre **90-95% de fidélité visuelle vs les screenshots TowerFall** (`inspirations/`), en restant **100% procédural CC0**. Découpée en 5 sous-PRs livrables séquentiellement, mergeables indépendamment.
+Objectif révisé après itération a/b : atteindre **70-90% de fidélité visuelle vs TowerFall** en pivotant vers un pack pixel art CC0 pour les éléments à plus forte densité visuelle (tiles + archers), tout en gardant le procédural pour l'ambiance (frames, vignette, fog, backgrounds).
+
+Pourquoi ce pivot : la stratégie 100% procédurale s'est avérée trop fragile (impossible d'itérer à l'aveugle sans visibilité directe sur le rendu). Le screenshot reçu de Saad post-10.5.a a montré un plafond ~25-30% de fidélité avec le procédural seul. Un pack CC0 polishé (Kenney, ~5 KB) pousse le SOL+archers à un niveau "réellement TowerFall-vibe" en quelques fonctions de slicing+tint.
 
 | Sous-phase | Scope | PR | Statut |
 |---|---|---|---|
-| **10.5.a** | Cadre + vignette + brume | `feat/visuals-10.5a` | 🔄 |
-| **10.5.b** | Tiles gravées chunky + props | `feat/visuals-10.5b` | ⏳ |
-| **10.5.c** | Backgrounds 3 layers + ambient particles | `feat/visuals-10.5c` | ⏳ |
-| **10.5.d** | FX events-driven (death burst, screen shake, hit-stop) | `feat/visuals-10.5d` | ⏳ |
-| **10.5.e** | Archers redessinés + HUD pictural | `feat/visuals-10.5e` | ⏳ |
+| **10.5.a** | Cadre + vignette + brume (procédural) | `feat/visuals-10.5a` | ✅ mergée |
+| **10.5.b** | CC0 pack (Kenney Tiny Dungeon) pour SOLID tiles + archers + procedural fixes (HUD/sun/frame focal) | `feat/visuals-cc0-pack` | 🔄 |
+| **10.5.c** | (TBD selon feedback) | — | ⏳ |
+
+### Phase 10.5.b — Pivot pack CC0 (Kenney Tiny Dungeon) + procedural fixes
+
+🔄 En cours dans la PR `feat/visuals-cc0-pack` : *(URL à backfill)*
+
+- **Pack vendoré** : `packages/client/public/assets/cc0/kenney/tiny-dungeon.png` (5.5 KB) + `tiny-dungeon-LICENSE.txt`. Source officielle <https://kenney.nl/assets/tiny-dungeon>, licence CC0 1.0 Universal. Auteur : Kenney Vleugels.
+- **`packages/client/src/assets/cc0-loader.ts`** — load + slice de la sheet (12×11 tiles 16×16, gap 1 px) en `Map<key, HTMLCanvasElement>`. `tintTile(src, color)` multiplie chaque pixel par une couleur RGB (alpha préservé) → permet de teinter au bake-time plutôt qu'au render-time, en gardant le contrat AssetRegistry inchangé.
+- **`packages/client/src/assets/cc0-mapping.ts`** — table d'indices `(col, row)` pour les tuiles utilisées + `TD_THEME_TINT` (3 thèmes, multiplicatif) + `TD_SKIN_TINT` (6 archer skins).
+- **`cc0-tiles.ts`** : remplace `SOLID_0..3` par 4 variantes Tiny Dungeon (rows 1-3 de la sheet) tintées au theme. Garde `SOLID_4..7`, `SOLID_FACE`, `JUMPTHRU`, `SPIKE` procéduraux (le pack n'a pas d'équivalent direct pour spikes/wood platforms qui collent à notre direction artistique).
+- **`cc0-archers.ts`** : tous les ~32 keys d'animation pointent vers la même tile knight (row 7 col 1) tintée au skin. On perd l'animation walk/idle/death (statique au lieu de cyclée), gain : silhouette knight cohérente et nette plutôt que des stick-figures procéduraux.
+- **`buildAllAssets` désormais async** : load CC0 d'abord, puis bake les canvases. Si fetch échoue (offline / CSP block), fallback automatique à la pipeline 100% procédurale (warning console). `main.ts` ajoute simplement un `await`.
+- **Procedural fixes du screenshot** :
+  - `HudRenderer` : nouveau backdrop `Graphics` translucide (alpha 0.55) sous tout le texte HUD. Le rouge "p1 N0/5 alive" sur ciel bleu Sacred Grove devient lisible.
+  - `background-painter.paintSunGlow` : soleil réduit de rayon 50 px → rayon 22 px, alpha 0.25 → 0.20, position 420,50 → 430,38. Ne mange plus 1/6 de l'écran.
+  - `frame-painter` : Sacred / Spires / Temple simplifiés à **un seul élément focal central** (1 mascaron / 1 banner / 1 mascaron mayan) au lieu de stacks de 2-3 stamps + courses + moss/embers spam. Code passe de 445 lignes à ~270.
+  - `vignette-painter` : `VIGNETTE_MAX_ALPHA` 0.55 → 0.32, inner radius 0.35 → 0.45 → moins agressif, ne mudge plus le centre du playfield.
+- **Engine inchangé** : zéro touche à packages/engine, zéro touche au state Colyseus.
+- **Bundle** : 85 KB gz → ~88 KB gz (delta +3 KB). Le pack PNG est servi statiquement par Vite (public/), pas dans le bundle JS.
+- **Tests** : engine 163/163, server 75/75, client 120/120.
 
 ### Phase 10.5.a — Cadre + vignette + brume
 

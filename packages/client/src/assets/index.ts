@@ -14,6 +14,9 @@ import {
   buildArcherSprites,
   type ArcherSpriteKey,
 } from "./archer-painter.js";
+import { buildArcherSpritesCC0 } from "./cc0-archers.js";
+import { loadCC0Sheet } from "./cc0-loader.js";
+import { buildTileSpritesCC0 } from "./cc0-tiles.js";
 import {
   buildArrowSprites,
   type ArrowSpriteKey,
@@ -82,14 +85,35 @@ const toTextureMap = <K>(
   return out;
 };
 
-export const buildAllAssets = (): AssetRegistry => {
+// Phase 10.5b — Now async. The Tiny Dungeon CC0 sheet is fetched
+// from `/assets/cc0/kenney/tiny-dungeon.png` (~5.5 KB) before the
+// per-tile / per-archer canvases are baked. If the fetch fails (e.g.
+// offline preview, CSP block), we fall back to the procedural
+// pipeline so the game still runs — visually degraded but functional.
+export const buildAllAssets = async (): Promise<AssetRegistry> => {
+  // Try to load the CC0 sheet first. Failure is non-fatal — fall back
+  // to procedural for tiles + archers.
+  let cc0Sheet: Awaited<ReturnType<typeof loadCC0Sheet>> | null = null;
+  try {
+    cc0Sheet = await loadCC0Sheet();
+  } catch (err) {
+    console.warn(
+      "[arrowfall] CC0 sheet load failed, falling back to procedural:",
+      err,
+    );
+  }
+
   const tiles = new Map<ThemeId, Map<TileSpriteKey, Texture>>();
   const backgrounds = new Map<BackgroundSpriteKey, Texture>();
   const decorations = new Map<ThemeId, Map<DecorationSpriteKey, Texture>>();
   const frames = new Map<ThemeId, Map<FrameSpriteKey, Texture>>();
   const fog = new Map<FogSpriteKey, Texture>();
   for (const theme of ALL_THEMES) {
-    tiles.set(theme, toTextureMap(buildTileSprites(theme)));
+    const tileCanvases =
+      cc0Sheet !== null
+        ? buildTileSpritesCC0(theme, cc0Sheet)
+        : buildTileSprites(theme);
+    tiles.set(theme, toTextureMap(tileCanvases));
     decorations.set(theme, toTextureMap(buildDecorationSprites(theme)));
     frames.set(theme, toTextureMap(buildFrameSprites(theme)));
     for (const [k, v] of toTextureMap(buildBackgroundSprites(theme))) {
@@ -102,7 +126,11 @@ export const buildAllAssets = (): AssetRegistry => {
 
   const archers = new Map<ArcherSkinId, Map<ArcherSpriteKey, Texture>>();
   for (const skin of ALL_ARCHER_SKINS) {
-    archers.set(skin, toTextureMap(buildArcherSprites(skin)));
+    const archerCanvases =
+      cc0Sheet !== null
+        ? buildArcherSpritesCC0(skin, cc0Sheet)
+        : buildArcherSprites(skin);
+    archers.set(skin, toTextureMap(archerCanvases));
   }
 
   const arrows = toTextureMap(buildArrowSprites());

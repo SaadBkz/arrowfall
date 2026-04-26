@@ -73,7 +73,7 @@ const noSprites = import.meta.env.VITE_NO_SPRITES === "1";
 let assets: AssetRegistry | null = null;
 if (!noSprites) {
   const t0 = performance.now();
-  assets = buildAllAssets();
+  assets = await buildAllAssets();
   console.log(
     `[arrowfall] assets built in ${(performance.now() - t0).toFixed(1)} ms`,
   );
