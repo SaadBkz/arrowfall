@@ -1,6 +1,19 @@
-export { connectToArena, colyseusUrl } from "./client.js";
+export { colyseusUrl, connectToArena, createRoom, joinRoomByCode } from "./client.js";
 export { matchStateToWorld } from "./match-mirror.js";
-export { MatchState, ArcherState, ArrowState } from "./schema.js";
+export {
+  ArcherState,
+  ArrowState,
+  isMatchPhase,
+  MatchState,
+  type MatchPhase,
+} from "./schema.js";
+export {
+  generateRoomCode,
+  isValidRoomCode,
+  normalizeRoomCode,
+  ROOM_CODE_ALPHABET,
+  ROOM_CODE_LENGTH,
+} from "./room-codes.js";
 export {
   PredictionEngine,
   CORRECTION_DIVERGENCE_PX,

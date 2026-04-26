@@ -1,4 +1,11 @@
-import { type Archer, createWorld, parseMap, stepWorld, type World } from "@arrowfall/engine";
+import {
+  type Archer,
+  createWorld,
+  getRoundOutcome,
+  parseMap,
+  stepWorld,
+  type World,
+} from "@arrowfall/engine";
 import {
   ARENA_HEIGHT_PX,
   ARENA_WIDTH_PX,
@@ -18,10 +25,8 @@ import { ArrowsRenderer } from "./render/arrow.js";
 import { HudRenderer } from "./render/hud.js";
 import { RoundMessageRenderer } from "./render/round-message.js";
 import { TilemapRenderer } from "./render/tilemap.js";
-import { getRoundOutcome } from "./round-state.js";
 import {
   archerFromSnapshot,
-  connectToArena,
   type MatchState,
   PredictionEngine,
   RemoteInterpolator,
@@ -91,19 +96,26 @@ export class Game {
   private readonly tickerCallback: () => void;
   private readonly resizeListener: () => void;
 
-  // Networked-mode state. `room` is null until joinOrCreate resolves.
-  // `netStatus` is shown in the HUD ("connecting", "online — N", "error").
+  // Networked-mode state. The room is supplied by main.ts after the
+  // user has gone through the menu (Phase 8). In local mode it stays null.
+  // `netStatus` is shown in the HUD ("connecting", "online", "error").
   private room: Room<MatchState> | null = null;
   private netStatus: "connecting" | "online" | "error" = "connecting";
   private netError: string | null = null;
 
   // Phase 7 — local prediction + remote interpolation. Both null in
-  // local mode; instantiated in connectAsync() right before the
-  // onStateChange handler so the first snapshot can populate them.
+  // local mode; instantiated alongside the room in attachRoom().
   private prediction: PredictionEngine | null = null;
   private interpolator: RemoteInterpolator | null = null;
 
-  constructor(app: Application, mode: GameMode = "local") {
+  // Phase 8 — observers notified whenever the server's state.phase
+  // string changes. The menu overlay registers here so it can swap
+  // panels (lobby ↔ hidden ↔ match-end) at the right moment without
+  // needing to subscribe to the room directly.
+  private phaseListeners: Array<(phase: string) => void> = [];
+  private lastSeenPhase: string = "lobby";
+
+  constructor(app: Application, mode: GameMode = "local", room: Room<MatchState> | null = null) {
     this.app = app;
     this.mode = mode;
 
@@ -171,6 +183,12 @@ export class Game {
 
     this.tickerCallback = (): void => this.tick();
     this.resizeListener = (): void => this.applyScale();
+
+    // If main.ts already handed us a connected room, plug it in straight
+    // away — `start()` will register listeners after the ticker is up.
+    if (room !== null) {
+      this.attachRoom(room);
+    }
   }
 
   start(): void {
@@ -178,49 +196,67 @@ export class Game {
     this.applyScale();
     window.addEventListener("resize", this.resizeListener);
     this.app.ticker.add(this.tickerCallback);
-    if (this.mode === "networked") {
-      this.connectAsync();
-    }
   }
 
-  // Fire-and-forget connection. Resolves into `this.room` if successful,
-  // sets an error status otherwise. The render loop renders an empty
-  // arena until the first state arrives.
-  private async connectAsync(): Promise<void> {
-    try {
-      const room = await connectToArena();
-      this.room = room;
-      this.netStatus = "online";
-      console.log(`[net] connected to arena (sessionId=${room.sessionId})`);
-
-      // Phase 7 — bring up prediction + interpolation now that we
-      // have a sessionId to identify ourselves with. Until the first
-      // onStateChange fires, both buffers stay empty and tickNetworked
-      // renders the (empty) predicted world.
-      this.prediction = new PredictionEngine(this.mapData, this.spawnPx);
-      this.interpolator = new RemoteInterpolator();
-
-      room.onStateChange(() => {
-        // Reconcile + ingest happen synchronously here. Reconcile
-        // mutates the predicted world and may arm a correction lerp;
-        // ingest pushes a snapshot into the per-session buffer.
-        // Rendering still flows from the ticker (one composed world
-        // per render frame) — patches faster than vsync don't waste
-        // draw calls.
-        this.prediction?.reconcile(room.state, room.sessionId);
-        this.interpolator?.ingest(room.state, room.sessionId);
-      });
-      room.onLeave(() => {
-        this.netStatus = "error";
-        this.netError = "disconnected";
-        this.room = null;
-        console.warn("[net] room closed");
-      });
-    } catch (err) {
-      this.netStatus = "error";
-      this.netError = err instanceof Error ? err.message : String(err);
-      console.error("[net] failed to connect:", err);
+  // Plug in a Colyseus room obtained externally (Phase 8 menu flow).
+  // Idempotent enough — calling it twice with different rooms is a
+  // programming error (we throw rather than reach for hidden cleanup).
+  attachRoom(room: Room<MatchState>): void {
+    if (this.room !== null) {
+      throw new Error("Game.attachRoom: a room is already attached");
     }
+    this.room = room;
+    this.netStatus = "online";
+    this.lastSeenPhase = room.state.phase || "lobby";
+    console.log(
+      `[net] attached room (code=${room.state.roomCode} sessionId=${room.sessionId})`,
+    );
+
+    this.prediction = new PredictionEngine(this.mapData, this.spawnPx);
+    this.interpolator = new RemoteInterpolator();
+
+    room.onStateChange(() => {
+      // Reconcile + ingest happen synchronously here. Reconcile
+      // mutates the predicted world and may arm a correction lerp;
+      // ingest pushes a snapshot into the per-session buffer.
+      this.prediction?.reconcile(room.state, room.sessionId);
+      this.interpolator?.ingest(room.state, room.sessionId);
+
+      // Notify menu observers when the server transitions phase. We
+      // emit on every state change too — the menu re-renders the
+      // lobby on score/ready toggles even if the phase stays "lobby".
+      const phase = room.state.phase;
+      const phaseChanged = phase !== this.lastSeenPhase;
+      this.lastSeenPhase = phase;
+      for (const fn of this.phaseListeners) fn(phase);
+      if (phaseChanged) {
+        console.log(`[net] phase -> ${phase}`);
+      }
+    });
+    room.onLeave(() => {
+      this.netStatus = "error";
+      this.netError = "disconnected";
+      this.room = null;
+      console.warn("[net] room closed");
+    });
+  }
+
+  // Phase 8 — main.ts subscribes to phase changes so the menu overlay
+  // can show/hide at the right moment. Listener is invoked once per
+  // server state patch, with the latest phase string.
+  onPhaseChange(listener: (phase: string) => void): void {
+    this.phaseListeners.push(listener);
+  }
+
+  // Toggle the local player's lobby ready flag. The server is the
+  // source of truth — this just sends the wire message and lets the
+  // resulting state patch flow back through onStateChange.
+  sendReady(ready: boolean): void {
+    this.room?.send("ready", { ready });
+  }
+
+  getRoom(): Room<MatchState> | null {
+    return this.room;
   }
 
   dispose(): void {
@@ -292,17 +328,21 @@ export class Game {
 
   private tickNetworked(): void {
     // Reset edge → broadcast a "reset" message. Server gates by
-    // NODE_ENV (dev only) — in prod this is silently ignored.
-    if (this.input.consumeReset() && this.room !== null) {
+    // NODE_ENV (dev only) — in prod this is silently ignored. Reset
+    // is also gated client-side by phase: lobby/match-end are already
+    // post-reset, so the keystroke would be a no-op there anyway.
+    const phase = this.room?.state.phase ?? "lobby";
+    const isLive = phase === "playing" || phase === "round-end";
+    if (this.input.consumeReset() && this.room !== null && isLive) {
       this.room.send("reset");
     }
 
-    // Drive the predicted world at the engine's fixed 60 Hz. Each
-    // step assigns a monotonic clientTick, queues the input for
-    // future replay, and ships the input + tick to the server. The
-    // server acks via state.lastInputTick which the onStateChange
-    // handler feeds back into `prediction.reconcile()`.
-    if (this.room !== null && this.prediction !== null) {
+    // Drive the predicted world only while the server is simulating
+    // (playing / round-end). In lobby and match-end the server pauses
+    // the world, so stepping locally would diverge and burn correction
+    // lerps the moment play resumes. We still drain edges so a queued
+    // keypress doesn't fire instantly when the next round starts.
+    if (this.room !== null && this.prediction !== null && isLive) {
       const room = this.room;
       const prediction = this.prediction;
       const stepFn = (): void => {
@@ -317,6 +357,11 @@ export class Game {
         this.input.consumeEdges(this.localPlayerId);
       };
       this.accumulator = runFixedStep(this.app.ticker.deltaMS, this.accumulator, stepFn);
+    } else {
+      // Drop any queued accumulator so we don't burst-step when play
+      // resumes after a long lobby pause.
+      this.accumulator = 0;
+      this.input.consumeEdges(this.localPlayerId);
     }
 
     // Compose the render world: predicted local + interpolated remotes
@@ -324,16 +369,54 @@ export class Game {
     this.world = this.composeRenderWorld();
 
     const archerIds = [...this.world.archers.keys()].sort();
+    const score = this.formatScoreBadge();
     const badge =
       this.netStatus === "online"
-        ? `online — ${archerIds.length} players`
+        ? `${this.room?.state.roomCode ?? "----"} · ${phase} · ${score}`
         : this.netStatus === "connecting"
           ? "connecting…"
           : `error: ${this.netError ?? "unknown"}`;
     this.archers.render(sortedArchers(this.world));
     this.arrows.render(this.world.arrows);
     this.hud.update(this.world, this.fps, archerIds, badge);
-    this.roundMessage.render(getRoundOutcome(this.world));
+    // Round-end overlay is driven by server phase rather than local
+    // alive-count: the freeze starts when the server says so, and we
+    // surface the authoritative roundWinner.
+    this.roundMessage.render(this.composeRoundOverlay());
+  }
+
+  // Build the "p1 1 / p2 0" string shown in the HUD during networked
+  // play. Uses the slot id (p1..p6) so colors line up with the rest
+  // of the UI.
+  private formatScoreBadge(): string {
+    if (this.room === null) return "";
+    const parts: string[] = [];
+    this.room.state.archers.forEach((archer, sessionId) => {
+      const wins = this.room!.state.wins.get(sessionId) ?? 0;
+      parts.push(`${archer.id} ${wins}`);
+    });
+    parts.sort();
+    const target = this.room.state.targetWins;
+    return `${parts.join(" / ")} (to ${target})`;
+  }
+
+  // Translate the server's authoritative round-winner into the same
+  // RoundOutcome shape the existing PixiJS overlay already understands.
+  // We could surface a Phase-8-specific overlay (with the score line),
+  // but the existing renderer covers 80% of the value with zero new
+  // code — Phase 9 can pretty it up if needed.
+  private composeRoundOverlay():
+    | { readonly kind: "ongoing" }
+    | { readonly kind: "win"; readonly winnerId: string }
+    | { readonly kind: "draw" } {
+    if (this.room === null) return { kind: "ongoing" };
+    const phase = this.room.state.phase;
+    if (phase !== "round-end") return { kind: "ongoing" };
+    const winnerSession = this.room.state.roundWinnerSessionId;
+    if (winnerSession === "") return { kind: "draw" };
+    const winnerArcher = this.room.state.archers.get(winnerSession);
+    if (winnerArcher === undefined) return { kind: "draw" };
+    return { kind: "win", winnerId: winnerArcher.id };
   }
 
   // Returns the world the renderer should draw this frame, layered:
