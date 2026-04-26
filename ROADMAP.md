@@ -13,11 +13,23 @@
 | **4** | Rendu client local — PixiJS sprite, contrôle clavier, 1 archer | démo locale jouable solo | ✅ |
 | **5** | Hot-seat 2-4 archers même clavier | démo locale 2-4 joueurs | ✅ |
 | **6** | Colyseus state schema + sync naïve | 2 onglets, état partagé | ✅ |
-| **7** | Client prediction + reconciliation + interpolation | latence ressentie < 100 ms | ⏳ |
+| **7** | Client prediction + reconciliation + interpolation | latence ressentie < 100 ms | ✅ |
 | **8** | Lobby, code de room 4 lettres, écran fin de round/match | match complet 2 joueurs distants | ⏳ |
 | **9** | Coffres + flèches Bomb, Drill, Laser + Shield | mécaniques complètes | ⏳ |
 | **10** | 3 maps designées + intégration assets pixel art CC0 | jeu visuel complet | ⏳ |
 | **11** | SFX + musique CC0 + polish + gamepad + fullscreen | MVP livré | ⏳ |
+
+## Phase 7 — Client prediction + reconciliation + interpolation (terminé)
+
+✅ Livrée dans la PR `feat/prediction-reconciliation` : *(URL backfill après merge)*
+
+- **Wire ack** : `MatchState.lastInputTick: MapSchema<uint32>` keyé par sessionId — chaque client envoie `{...input, clientTick}` à 60 Hz, le serveur range le plus haut tick reçu via `validateClientTick` (uint32 + Number.isInteger + range check ; `validateInput` reste pure côté shape engine). `worldToMatchState` mirror la map et la prune sur leave. Le compteur clientTick est monotone et survit aux resets (c'est un horloge locale, pas du round state).
+- **PredictionEngine** ([`packages/client/src/net/prediction.ts`](packages/client/src/net/prediction.ts)) — détient `predictedWorld`, FIFO `pendingInputs` borné à 120, `localSlotId` résolu au premier `state.archers.get(sessionId)`. `stepLocal(input)` : push pending, `stepWorld(predictedWorld, {[mySlot]: input})`, ship sur le wire, décrémente le frame counter de la correction lerp. `reconcile(state, sessionId)` : drop pending acked, rebuild via `matchStateToWorld`, replay des restants ; si `|previousLocal.pos - newLocal.pos| > 4 px`, arme un offset de **correction lerp 4 frames** (linéaire, additif au rendu).
+- **RemoteInterpolator** ([`packages/client/src/net/interpolation.ts`](packages/client/src/net/interpolation.ts)) — buffer de 5 snapshots par sessionId non-local, capture profonde des champs (les schema instances mutent en place sous nous). Render target = `latestServerTick - 2` (clamp à 0 au cold start). `interpolateBuffer` = lerp linéaire entre la paire bracketante, fallback vers oldest/newest hors-borne, snap des champs discrets (facing/state) sur la frame la plus récente. Cold start = < 2 snapshots → `Game` retombe sur la position prédite (jamais d'extrapolation).
+- **Game.tickNetworked réécrit** : `runFixedStep` à 60 Hz drive `prediction.stepLocal(input)` au lieu de mirrorer le state ; `room.send("input", {...input, clientTick})` ; `composeRenderWorld()` superpose les archers interpolés + l'offset de correction sur l'archer local. Les flèches restent celles du predictedWorld (interpolation = Phase 9 si nécessaire).
+- **Tradeoffs documentés** (`packages/client/README.md`) : pas de rollback netcode (trop pour un MVP solo), prédiction purement locale sur l'archer du joueur, hit reg toujours autoritaire serveur. Lerp 4 frames = 67 ms (sous le seuil de perception), seuil 4 px = demi-tile (ignore le bruit de drift sur les engine fields non-mirrorés timers/prevBottom).
+- **Tests** : engine 125/125 inchangé + **client 26/26** (+19 nouveaux : `prediction.test.ts` 7 cas — monotonicité clientTick, drop pending acked, équivalence prédiction/server par déterminisme moteur, replay unacked, correction armée vs sub-seuil, décroissance — et `interpolation.test.ts` 12 cas — null/singleton/bracket-pair lerp, hors-borne, exclusion local, target tick, clamp 0, cold-start, éviction ring, pruning sur leave) + **server 34/34** (+11 nouveaux pour `validateClientTick`, mirror `lastInputTick`, monotonicité ack et drop sur leave dans `ArenaRoom`).
+- Validation manuelle 2-onglets `?net=1` (à exécuter au merge) : sans throttling indistinguable du hot-seat ; sous Slow 3G le mouvement local reste réactif (cible spec §14.3 < 100 ms), les autres bougent en interpolé sans tremblement.
 
 ## Phase 6 — Colyseus state schema + sync naïve (terminé)
 

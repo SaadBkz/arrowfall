@@ -161,3 +161,58 @@ Sur erreur de connexion (server down, mismatch schéma, etc.), le HUD affiche «
 ### `useDefineForClassFields` — pourquoi `declare`
 
 Les schémas utilisent `declare field: T;` au lieu de `field!: T;` parce que sous `useDefineForClassFields: true` (défaut TS pour `target: ES2022+`), même les définitions `field!:` émettent un `Object.defineProperty` qui shadow les getters/setters installés par `Schema.initialize`. Conséquence : les MapSchema/ArraySchema ne reçoivent pas leur `~childType` et l'encodage casse au premier patch. `declare` n'émet aucun champ — le prototype reste intact, les assignations dans le constructeur déclenchent les setters comme attendu par `@colyseus/schema`.
+
+## Prediction + Reconciliation (Phase 7)
+
+Phase 6 mettait le client en mirror pur du serveur — chaque input partait sur le wire et on attendait le snapshot retour avant de bouger l'archer. Avec une RTT > 50 ms le contrôle devenait gluant. Phase 7 met une **simulation prédictive locale** côté client (sur le même `stepWorld` déterministe que le serveur), réconciliée à chaque snapshot.
+
+### Flow général
+
+```
+Render frame                         Server (autoritaire, 60 Hz step / 30 Hz patch)
+─────────────────────                ────────────────────────────────────────────
+input = snapshot(p1)                 onMessage("input")
+clientTick = ++counter
+pendingInputs.push({tick, input})    handleInput → inputs.set(slot, validated)
+predicted = stepWorld(predicted, …)  lastClientTickBySession.set(session, t)
+room.send("input", {…, clientTick})        ─────────►
+                                     simulate (60 Hz)
+                                     state.tick++
+                                     state.lastInputTick.set(session, t)
+                                            ◄─────────  patch (30 Hz)
+onStateChange:
+  reconcile(state, sessionId):
+    drop pendingInputs ≤ ackedTick
+    rebuild predicted ← matchStateToWorld(state)
+    replay pendingInputs > ackedTick
+    if |Δpos| > 4 px → arm correction lerp 4 frames
+  ingest(state, sessionId)
+    push (tick, snap) into per-session buffer (capacité 5)
+                                                 
+Render: predicted (local + arrows) + interpolated remotes (à serverTick - 2)
+        + correction-offset décroissant sur l'archer local
+```
+
+### Stratégie
+
+- **`clientTick`** — compteur monotone 1..N+, joint à chaque input wire (`{...input, clientTick}`). Le serveur le récupère via `validateClientTick`, range le plus haut vu par session dans `MatchState.lastInputTick` (MapSchema keyé sessionId, uint32). C'est le canal d'**ack** : un input ≤ `lastInputTick[mySessionId]` a été consommé côté serveur.
+- **PredictionEngine** ([`net/prediction.ts`](./src/net/prediction.ts)) — détient `predictedWorld: World` (le World engine local), `pendingInputs: {tick, input}[]` borné à 120 (≈ 2 s à 60 Hz). À chaque fixed-step : push pending, `stepWorld(predicted, {[mySlot]: input})`, ship sur le wire. Les autres archers reçoivent `NEUTRAL_INPUT` côté local — leur position est de toute façon écrasée par l'interpolation au render.
+- **reconcile()** — sur `onStateChange` : drop des pending acked, `predicted = matchStateToWorld(state)`, replay des pending restants. Si l'archer local a divergé de plus de **4 px** (`CORRECTION_DIVERGENCE_PX`) entre la position prédite avant reconcile et la position après, arme un offset de **correction lerp** sur **4 frames** (`CORRECTION_LERP_FRAMES`). L'offset se décrémente linéairement à chaque `stepLocal` ; le rendu l'**ajoute** à la position pour qu'on revienne en douceur, sans snap brutal.
+- **RemoteInterpolator** ([`net/interpolation.ts`](./src/net/interpolation.ts)) — buffer de 5 snapshots par sessionId distant (`PerArcherBuffer`). Au render, on cible `latestServerTick - 2` (≈ 33 ms en arrière) et on lerp linéairement entre les deux entrées qui encadrent. Cold start (< 2 snapshots) → fallback rendu direct du dernier snapshot ; ne s'extrapolation pas. Les buffers se prunent quand une session quitte (la session disparaît du `state.archers`).
+- **Composition** au render (`Game.composeRenderWorld`) — on part du `predictedWorld`, on remplace les archers non-locaux par leurs versions interpolées (sauf cold-start), puis on ajoute l'offset de correction sur l'archer local. Les flèches restent celles du `predictedWorld` — interpolation des flèches = Phase 9 si nécessaire.
+
+### Tradeoffs vs rollback netcode
+
+- **Rollback complet** (rejouer toutes les entités à partir d'un snapshot) est l'approche standard des fighting games — plus de fluidité, mais demande de désérialiser et de rejouer tous les acteurs sur chaque snapshot. Pas pour un MVP solo dev.
+- L'approche Phase 7 reste **purement locale sur l'archer du joueur**. On ne tente pas de prédire le tir des adversaires ni les flèches qu'ils lancent — l'interpolation à -2 ticks gère ça. Conséquence : le combat *contre* un autre joueur reste à la latence du serveur (le hit reg passe par le serveur) ; seul le mouvement ressenti **localement** est instant.
+- La **correction lerp à 4 frames** est un compromis : 4 frames = 67 ms à 60 Hz — dans la fenêtre où l'œil ne perçoit pas un déplacement comme un saut mais comme un glissement. Plus court → snap visible. Plus long → l'archer répond aux inputs *à la mauvaise position* pendant trop longtemps. Le seuil 4 px est un demi-tile : suffisant pour ignorer le bruit de drift sur des fields engine non-mirrorés (timers etc.) sans laisser le joueur partir en sucette en cas de vraie correction.
+- L'`INTERPOLATION_DELAY_TICKS = 2` (≈ 33 ms à 30 Hz patch rate) compose avec le ping pour rester dans la spec §14.3 (« < 100 ms ressentie ») même en présence de jitter de paquet : on échange 33 ms de retard visuel sur les autres contre une absence de tremblement quand les patches arrivent groupés.
+
+### Tests
+
+- **Engine 125/125** inchangé — aucun nouveau cas dans `@arrowfall/engine`, c'est précisément la pureté du moteur qui rend la prédiction triviale.
+- **Client 26/26** dont **19 nouveaux** :
+  - `prediction.test.ts` (7 cas) — clientTick monotone, queue pending, drop acked, équivalence prédiction/server par déterminisme, replay des unacked, correction lerp armée + décroissance, pas de correction sur drift sub-seuil.
+  - `interpolation.test.ts` (12 cas) — null sur buffer vide, fallback singleton, lerp entre paire bracketante, target hors-borne, sélection bonne paire en buffer 3+, exclusion local sessionId, target tick = latest - delay, clamp à 0, cold-start booléen, éviction quand > BUFFER_SIZE, pruning sur leave.
+- **Server 34/34** dont **11 nouveaux** : `validateClientTick` (range / type / NaN / Infinity / overflow), `worldToMatchState.lastInputTick` (mirror + pruning + default empty), `ArenaRoom` (mirror du tick, monotonicité ack, pas d'avance sur payload malformé, drop sur leave).
+- **Pas** de test browser ou de smoke automatisé — la validation finale reste manuelle (2 onglets `?net=1` sur Chrome avec throttling Slow 3G ; cf. critères d'acceptation Phase 7 du ROADMAP).

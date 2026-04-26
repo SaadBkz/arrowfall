@@ -1,10 +1,5 @@
 import { type World, createWorld, stepWorld } from "@arrowfall/engine";
-import {
-  type ArcherInput,
-  type MapData,
-  TILE_SIZE,
-  type Vec2,
-} from "@arrowfall/shared";
+import { type ArcherInput, type MapData, TILE_SIZE, type Vec2 } from "@arrowfall/shared";
 import { matchStateToWorld } from "./match-mirror.js";
 import type { MatchState } from "./schema.js";
 
@@ -101,10 +96,7 @@ export class PredictionEngine {
     // sur 4 frames" wording.
     if (this.correction !== null) {
       const next = this.correction.framesLeft - 1;
-      this.correction =
-        next <= 0
-          ? null
-          : { ...this.correction, framesLeft: next };
+      this.correction = next <= 0 ? null : { ...this.correction, framesLeft: next };
     }
 
     return tick;
@@ -132,15 +124,13 @@ export class PredictionEngine {
     // Keep only inputs the server hasn't acked yet. Strict > so that
     // the input *exactly* acked is dropped (the server already applied
     // its effect and reflects it in the snapshot).
-    this.pendingInputs = this.pendingInputs.filter(
-      (p) => p.clientTick > ackedTick,
-    );
+    this.pendingInputs = this.pendingInputs.filter((p) => p.clientTick > ackedTick);
 
     // Save where we *thought* the local archer was, to decide whether
     // to arm a lerp.
     const previousLocal =
       this.localSlotId !== null
-        ? this.predictedWorld.archers.get(this.localSlotId) ?? null
+        ? (this.predictedWorld.archers.get(this.localSlotId) ?? null)
         : null;
 
     // Rebuild predicted from the server snapshot.

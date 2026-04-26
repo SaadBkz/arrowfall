@@ -166,9 +166,7 @@ export class Game {
     // Only wire the active bindings. In networked mode that's just p1;
     // in local mode it's PLAYER_COUNT slots from PLAYER_BINDINGS.
     const activeBindings =
-      mode === "networked"
-        ? PLAYER_BINDINGS.slice(0, 1)
-        : PLAYER_BINDINGS.slice(0, PLAYER_COUNT);
+      mode === "networked" ? PLAYER_BINDINGS.slice(0, 1) : PLAYER_BINDINGS.slice(0, PLAYER_COUNT);
     this.input = new KeyboardInput(activeBindings);
 
     this.tickerCallback = (): void => this.tick();

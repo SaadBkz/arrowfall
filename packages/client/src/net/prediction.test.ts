@@ -1,10 +1,5 @@
 import { createWorld, parseMap, stepWorld, type World } from "@arrowfall/engine";
-import {
-  type ArcherInput,
-  type MapJson,
-  NEUTRAL_INPUT,
-  TILE_SIZE,
-} from "@arrowfall/shared";
+import { type ArcherInput, type MapJson, NEUTRAL_INPUT, TILE_SIZE } from "@arrowfall/shared";
 import { describe, expect, it } from "vitest";
 import arena01 from "../maps/arena-01.json" with { type: "json" };
 import {
@@ -211,12 +206,7 @@ describe("PredictionEngine — correction lerp on divergence", () => {
     const a = serverWorld.archers.get(SLOT)!;
     const teleported: World = {
       ...serverWorld,
-      archers: new Map([
-        [
-          SLOT,
-          { ...a, pos: { x: beforePos.x - 20, y: beforePos.y } },
-        ],
-      ]),
+      archers: new Map([[SLOT, { ...a, pos: { x: beforePos.x - 20, y: beforePos.y } }]]),
     };
     pe.reconcile(mirrorWorldToState(teleported, SLOT, 5, 5), SESSION);
 

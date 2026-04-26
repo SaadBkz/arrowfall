@@ -74,12 +74,7 @@ export class ArenaRoom extends Room<MatchState> {
     // Phase 8 (lobby + matchmaking) will revisit so mid-round joins
     // don't reset everyone.
     this.world = createWorld(this.mapData, this.spawnsPx, []);
-    worldToMatchState(
-      this.world,
-      this.state,
-      this.archerIdBySession,
-      this.lastClientTickBySession,
-    );
+    worldToMatchState(this.world, this.state, this.archerIdBySession, this.lastClientTickBySession);
 
     this.setSimulationInterval((dtMs) => this.simulate(dtMs), SIMULATION_INTERVAL_MS);
     this.setPatchRate(PATCH_INTERVAL_MS);
@@ -177,15 +172,8 @@ export class ArenaRoom extends Room<MatchState> {
   }
 
   private rebuildWorld(): void {
-    this.world = createWorld(this.mapData, this.spawnsPx, [
-      ...this.archerIdBySession.values(),
-    ]);
-    worldToMatchState(
-      this.world,
-      this.state,
-      this.archerIdBySession,
-      this.lastClientTickBySession,
-    );
+    this.world = createWorld(this.mapData, this.spawnsPx, [...this.archerIdBySession.values()]);
+    worldToMatchState(this.world, this.state, this.archerIdBySession, this.lastClientTickBySession);
   }
 
   private simulate(_dtMs: number): void {
@@ -214,11 +202,6 @@ export class ArenaRoom extends Room<MatchState> {
       }
     }
 
-    worldToMatchState(
-      this.world,
-      this.state,
-      this.archerIdBySession,
-      this.lastClientTickBySession,
-    );
+    worldToMatchState(this.world, this.state, this.archerIdBySession, this.lastClientTickBySession);
   }
 }
