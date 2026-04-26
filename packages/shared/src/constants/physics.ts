@@ -49,3 +49,23 @@ export const ARROW_GROUNDED_PICKUP_DELAY = 10; // grace after landing before pic
 
 // §4.2 Arrow physics — Normal arrow.
 export const ARROW_SPEED = 5.0; // px/frame (initial muzzle speed)
+
+// §4.2 Bomb arrow (Phase 9a). Slower in flight, ignites on wall impact
+// or after BOMB_FUSE_FRAMES, exploding in a square AABB of radius
+// BOMB_RADIUS_PX around its position.
+export const BOMB_ARROW_SPEED = 4.5; // px/frame
+export const BOMB_FUSE_FRAMES = 60; // 1 s before auto-detonation
+export const BOMB_RADIUS_PX = 24; // half-width of the explosion AABB
+export const EXPLOSION_FX_FRAMES = 18; // visual-only, server doesn't track this
+
+// §6 Treasure chests (Phase 9a).
+export const CHEST_OPEN_DURATION_FRAMES = 30; // contact → opening anim
+// Loot drops are added directly to the opener's inventory rather than
+// ejected as flying arrows — simpler and avoids a second collision pass.
+// Spec §6.2 contents (probabilités MVP).
+export const CHEST_BOMB_LOOT_COUNT = 2;
+export const CHEST_NORMAL_LOOT_COUNT = 2;
+// Spawn cadence (server-side, see ChestSpawner). Inclusive bounds.
+export const CHEST_SPAWN_MIN_INTERVAL_FRAMES = 240; // 4 s
+export const CHEST_SPAWN_MAX_INTERVAL_FRAMES = 480; // 8 s
+export const CHEST_MAX_SIMULTANEOUS = 2;

@@ -1,10 +1,10 @@
-import { ARROW_SPEED } from "@arrowfall/shared";
+import { ARROW_SPEED, BOMB_ARROW_SPEED } from "@arrowfall/shared";
 import {
   ARCHER_HITBOX_H,
   ARCHER_HITBOX_W,
   type Archer,
 } from "../archer/types.js";
-import { ARROW_H, ARROW_W, type Arrow } from "./types.js";
+import { ARROW_H, ARROW_W, type Arrow, type ArrowType } from "./types.js";
 
 // Spec §3.2 — when an archer dies, its remaining inventory is ejected in
 // an arc around the death point. We use a *fully deterministic* scheme
@@ -23,7 +23,17 @@ export const dropArrowsOnDeath = (
   archer: Archer,
   arrowIdBase: string,
 ): readonly Arrow[] => {
-  const n = archer.inventory;
+  // Phase 9a — eject normals first, then bombs. Both share the same
+  // deterministic fan; ordering them by type keeps the index stable
+  // across runs (id suffix uses the global index, so the fan order
+  // does not depend on field iteration). Bombs spawn with their own
+  // muzzle speed so the visual reads as "this is a bomb spilling out"
+  // rather than a normal arrow with a different sprite.
+  const types: ArrowType[] = [
+    ...new Array<ArrowType>(archer.inventory).fill("normal"),
+    ...new Array<ArrowType>(archer.bombInventory).fill("bomb"),
+  ];
+  const n = types.length;
   if (n <= 0) return [];
 
   // Anchor at the centre of the body so the fan blooms from the chest.
@@ -35,11 +45,13 @@ export const dropArrowsOnDeath = (
     // Evenly space N angles in (-π, 0): angle_i = -π + π · (i+1)/(N+1).
     // For N=1 this is -π/2 (straight up); for N=3 it is NW, N, NE; etc.
     const angle = -Math.PI + (Math.PI * (i + 1)) / (n + 1);
-    const vx = ARROW_SPEED * Math.cos(angle);
-    const vy = ARROW_SPEED * Math.sin(angle);
+    const type = types[i]!;
+    const speed = type === "bomb" ? BOMB_ARROW_SPEED : ARROW_SPEED;
+    const vx = speed * Math.cos(angle);
+    const vy = speed * Math.sin(angle);
     out.push({
       id: `${arrowIdBase}-${i}`,
-      type: "normal",
+      type,
       pos: { x: cx, y: cy },
       vel: { x: vx, y: vy },
       ownerId: archer.id,

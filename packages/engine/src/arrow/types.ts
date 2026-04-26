@@ -1,16 +1,22 @@
 import { type AABB, type Vec2 } from "@arrowfall/shared";
 
-// Phase 3 only ships Normal arrows. Bomb/Drill/Laser arrive in Phase 9 —
-// keeping the union open with a single member is cheap and the call sites
-// already exhaustive-switch on it.
-export type ArrowType = "normal";
+// Phase 3 shipped only Normal. Phase 9a adds Bomb (fuse + AABB explosion).
+// Drill and Laser arrive in Phase 9b. Call sites exhaustive-switch on this
+// union, so the typechecker forces every step to handle the new member.
+export type ArrowType = "normal" | "bomb";
 
 // Lifecycle:
-//   flying   — moving under gravity, can hit archers and walls
-//   grounded — landed on a SOLID floor, ramassable after grounded cooldown
-//   embedded — stuck in a SOLID wall (or in an archer that just died);
-//              also ramassable after the same cooldown (spec §4.1)
-export type ArrowStatus = "flying" | "grounded" | "embedded";
+//   flying    — moving under gravity, can hit archers and walls
+//   grounded  — landed on a SOLID floor, ramassable after grounded cooldown
+//   embedded  — stuck in a SOLID wall (or in an archer that just died);
+//               also ramassable after the same cooldown (spec §4.1)
+//   exploding — Phase 9a, bomb-only. stepArrow flips to this when the fuse
+//               expires or the bomb hits a wall; stepWorld then resolves
+//               the AABB explosion (kill archers in radius), removes the
+//               arrow and emits a `bomb-exploded` event. The state lives
+//               for at most one tick — never serialized to a snapshot a
+//               render frame can observe directly.
+export type ArrowStatus = "flying" | "grounded" | "embedded" | "exploding";
 
 export type Arrow = {
   readonly id: string;

@@ -1,5 +1,6 @@
 import {
   ARROW_GROUNDED_PICKUP_DELAY,
+  BOMB_FUSE_FRAMES,
   type MapData,
   GRAVITY,
   MAX_FALL_SPEED,
@@ -10,25 +11,45 @@ import { type Arrow, type ArrowStatus, arrowAabb } from "./types.js";
 
 // Pure: returns a fresh Arrow.
 //
-// Phase 3 ships only Normal arrows. Behaviour:
-//   - flying  : semi-implicit Euler with GRAVITY clamped at MAX_FALL_SPEED
-//               (mirrors stepGravity / stepArcher), then axis-separated
-//               sweep. Only SOLID tiles block — JUMPTHRU and SPIKE are
-//               passable for arrows in this phase. On any axis impact the
-//               arrow embeds at the post-resolution position with vel=0.
-//   - grounded / embedded : no movement, decrement groundedTimer.
+// Behaviour by type / status:
+//   - normal flying   : semi-implicit Euler with GRAVITY clamped at
+//                       MAX_FALL_SPEED, axis-separated sweep against
+//                       SOLID only (JUMPTHRU / SPIKE are passable for
+//                       arrows). On any axis impact the arrow embeds at
+//                       the post-resolution position with vel=0.
+//   - bomb flying     : same physics, but a wall hit OR `age + 1 >=
+//                       BOMB_FUSE_FRAMES` flips status to "exploding"
+//                       at the resolved position. stepWorld resolves
+//                       the explosion the same tick (kills + event +
+//                       removal). Never lands as grounded/embedded.
+//   - grounded/embed  : no movement, decrement groundedTimer.
+//   - exploding       : transient — left for stepWorld to harvest. We
+//                       don't mutate it further here (idempotent).
 //   - age increments unconditionally.
 //   - position wraps at the framebuffer edges, just like archers.
 //
-// We pass a dummy `prevBottom` to sweepY (any value past the arena floor
-// works) since JUMPTHRU is ignored for arrows and prevBottom is only
-// consulted when JUMPTHRU rules apply.
+// We pass a sentinel `prevBottom` to sweepY (any value past the arena
+// floor works) since JUMPTHRU is ignored for arrows and prevBottom is
+// only consulted when JUMPTHRU rules apply.
 export const stepArrow = (arrow: Arrow, map: MapData): Arrow => {
   const age = arrow.age + 1;
+
+  if (arrow.status === "exploding") {
+    // Idempotent — stepWorld picks it up this same frame.
+    return { ...arrow, age };
+  }
 
   if (arrow.status !== "flying") {
     const groundedTimer = Math.max(0, arrow.groundedTimer - 1);
     return { ...arrow, age, groundedTimer };
+  }
+
+  // Bomb fuse check BEFORE the move sweep. If the fuse just expired,
+  // the bomb explodes at its current position — no extra movement this
+  // frame. Same boundary as a wall hit (status="exploding") so
+  // stepWorld harvests both code paths uniformly.
+  if (arrow.type === "bomb" && age >= BOMB_FUSE_FRAMES) {
+    return { ...arrow, age, status: "exploding", vel: { x: 0, y: 0 } };
   }
 
   // Semi-implicit Euler: apply gravity to vy, then sweep.
@@ -53,10 +74,20 @@ export const stepArrow = (arrow: Arrow, map: MapData): Arrow => {
   const wrapped = wrapPosition({ x: xResult.x, y: yResult.y });
 
   if (hit) {
-    // Distinguish floor-landing (grounded, lies flat) from wall/ceiling
-    // impact (embedded, sticks out of the surface). Both are pickable
-    // after ARROW_GROUNDED_PICKUP_DELAY frames; the distinction is
-    // mostly cosmetic for the renderer.
+    if (arrow.type === "bomb") {
+      // Bomb on impact → explode at the resolved position.
+      return {
+        ...arrow,
+        pos: wrapped,
+        vel: { x: 0, y: 0 },
+        status: "exploding",
+        age,
+      };
+    }
+    // Normal arrow: distinguish floor-landing (grounded, lies flat)
+    // from wall/ceiling impact (embedded, sticks out of the surface).
+    // Both are pickable after ARROW_GROUNDED_PICKUP_DELAY frames; the
+    // distinction is mostly cosmetic for the renderer.
     const status: ArrowStatus =
       yResult.hit === "ground" ? "grounded" : "embedded";
     return {
