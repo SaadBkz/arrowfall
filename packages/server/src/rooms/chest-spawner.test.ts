@@ -25,7 +25,7 @@ const stubChest = (pos: Vec2): Chest => ({
   status: "closed",
   openTimer: 0,
   openerId: null,
-  contents: { type: "normal", count: 2 },
+  contents: { kind: "arrows", type: "normal", count: 2 },
 });
 
 let realRandom: () => number;
@@ -116,26 +116,70 @@ describe("ChestSpawner — caps and free slots", () => {
   });
 });
 
-describe("ChestSpawner — loot table", () => {
-  it("rolls a normal-arrow drop when rollLoot's Math.random < 0.6", () => {
-    // Pin every call to a small value so all randomness uses 0.
-    // Tick set well past the schedule so randomInterval doesn't matter.
-    pinRandom([0]);
+describe("ChestSpawner — loot table (Phase 9b: 50/20/15/10/5)", () => {
+  // Loot bands: [0, 0.5)=normal, [0.5, 0.7)=bomb, [0.7, 0.85)=drill,
+  // [0.85, 0.95)=laser, [0.95, 1.0)=shield. Tests pin Math.random to a
+  // value squarely inside each band's interval (the spawner consumes
+  // two randoms per spawn — randomInterval, then either freePos or
+  // rollLoot — so we use sequences that lock the loot roll
+  // predictably).
+
+  // randomInterval is consumed once on reset, so the next call is
+  // freePos pick (uses one random), then rollLoot. We use a uniform
+  // pinRandom that feeds the same value for every call.
+  it("rolls normal arrows for r ∈ [0, 0.5)", () => {
+    pinRandom([0.25]);
     const spawner = newSpawner();
     spawner.reset(0);
     const chest = spawner.maybeSpawn(CHEST_SPAWN_MAX_INTERVAL_FRAMES + 1, [])!;
-    expect(chest.contents.type).toBe("normal");
-    expect(chest.contents.count).toBe(2);
+    expect(chest.contents.kind).toBe("arrows");
+    if (chest.contents.kind === "arrows") {
+      expect(chest.contents.type).toBe("normal");
+      expect(chest.contents.count).toBe(2);
+    }
   });
 
-  it("rolls a bomb-arrow drop when rollLoot's Math.random >= 0.6", () => {
-    // Pin every call to a large value. randomInterval(0.99) = 478,
-    // so we tick past that to guarantee the spawn fires.
-    pinRandom([0.99]);
+  it("rolls bomb arrows for r ∈ [0.5, 0.7)", () => {
+    pinRandom([0.6]);
     const spawner = newSpawner();
     spawner.reset(0);
     const chest = spawner.maybeSpawn(CHEST_SPAWN_MAX_INTERVAL_FRAMES + 1, [])!;
-    expect(chest.contents.type).toBe("bomb");
-    expect(chest.contents.count).toBe(2);
+    expect(chest.contents.kind).toBe("arrows");
+    if (chest.contents.kind === "arrows") {
+      expect(chest.contents.type).toBe("bomb");
+      expect(chest.contents.count).toBe(2);
+    }
+  });
+
+  it("rolls drill arrows for r ∈ [0.7, 0.85)", () => {
+    pinRandom([0.78]);
+    const spawner = newSpawner();
+    spawner.reset(0);
+    const chest = spawner.maybeSpawn(CHEST_SPAWN_MAX_INTERVAL_FRAMES + 1, [])!;
+    expect(chest.contents.kind).toBe("arrows");
+    if (chest.contents.kind === "arrows") {
+      expect(chest.contents.type).toBe("drill");
+      expect(chest.contents.count).toBe(2);
+    }
+  });
+
+  it("rolls laser arrows for r ∈ [0.85, 0.95)", () => {
+    pinRandom([0.9]);
+    const spawner = newSpawner();
+    spawner.reset(0);
+    const chest = spawner.maybeSpawn(CHEST_SPAWN_MAX_INTERVAL_FRAMES + 1, [])!;
+    expect(chest.contents.kind).toBe("arrows");
+    if (chest.contents.kind === "arrows") {
+      expect(chest.contents.type).toBe("laser");
+      expect(chest.contents.count).toBe(2);
+    }
+  });
+
+  it("rolls a shield for r ∈ [0.95, 1.0)", () => {
+    pinRandom([0.97]);
+    const spawner = newSpawner();
+    spawner.reset(0);
+    const chest = spawner.maybeSpawn(CHEST_SPAWN_MAX_INTERVAL_FRAMES + 1, [])!;
+    expect(chest.contents.kind).toBe("shield");
   });
 });

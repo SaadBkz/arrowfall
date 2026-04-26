@@ -58,6 +58,9 @@ export const worldToMatchState = (
     s.spawnIframeTimer = archer.spawnIframeTimer;
     s.dodgeIframeTimer = archer.dodgeIframeTimer;
     s.bombInventory = archer.bombInventory;
+    s.drillInventory = archer.drillInventory;
+    s.laserInventory = archer.laserInventory;
+    s.hasShield = archer.hasShield;
     seenSessions.add(sessionId);
   }
   for (const sessionId of [...state.archers.keys()]) {
@@ -115,8 +118,16 @@ export const worldToMatchState = (
     s.status = chest.status;
     s.openTimer = chest.openTimer;
     s.openerId = chest.openerId ?? "";
-    s.lootType = chest.contents.type;
-    s.lootCount = chest.contents.count;
+    s.lootKind = chest.contents.kind;
+    if (chest.contents.kind === "arrows") {
+      s.lootType = chest.contents.type;
+      s.lootCount = chest.contents.count;
+    } else {
+      // shield: lootType / lootCount are unused; keep stable defaults
+      // so the wire patch doesn't churn when the chest is shield-bearing.
+      s.lootType = "normal";
+      s.lootCount = 0;
+    }
     seenChests.add(chest.id);
   }
   for (let i = state.chests.length - 1; i >= 0; i--) {

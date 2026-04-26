@@ -1,10 +1,19 @@
 import { Schema, defineTypes } from "@colyseus/schema";
 
-// Phase 9a — wire schema for one chest. Mirrors @arrowfall/engine's
+// Phase 9a/9b — wire schema for one chest. Mirrors @arrowfall/engine's
 // Chest type with the same field-flattening convention as ArcherState
 // (Vec2 → posX/posY) so @colyseus/schema can patch primitives only.
 //
-// `lootType` + `lootCount` flatten the engine's ChestContents object.
+// ChestContents (engine) is a discriminated union over `kind`:
+//   - { kind: "arrows", type: ArrowType, count: number }
+//   - { kind: "shield" }
+// We flatten that into three fields:
+//   - lootKind  : "arrows" | "shield"
+//   - lootType  : ArrowType — meaningful only when lootKind = "arrows"
+//   - lootCount : uint8     — meaningful only when lootKind = "arrows"
+// Both clients and the engine ignore lootType/lootCount when
+// lootKind === "shield".
+//
 // `openerId` is the empty string when no opener is set yet (closed
 // chest); MapSchema sentinels need a defined value, not null.
 //
@@ -16,7 +25,8 @@ export class ChestState extends Schema {
   declare status: string; // "closed" | "opening" | "opened"
   declare openTimer: number;
   declare openerId: string; // "" if none
-  declare lootType: string; // "normal" | "bomb"
+  declare lootKind: string; // "arrows" | "shield"
+  declare lootType: string; // ArrowType (only meaningful when lootKind="arrows")
   declare lootCount: number;
 
   constructor() {
@@ -27,6 +37,7 @@ export class ChestState extends Schema {
     this.status = "closed";
     this.openTimer = 0;
     this.openerId = "";
+    this.lootKind = "arrows";
     this.lootType = "normal";
     this.lootCount = 0;
   }
@@ -39,6 +50,7 @@ defineTypes(ChestState, {
   status: "string",
   openTimer: "uint16",
   openerId: "string",
+  lootKind: "string",
   lootType: "string",
   lootCount: "uint8",
 });

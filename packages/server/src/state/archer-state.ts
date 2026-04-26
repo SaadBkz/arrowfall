@@ -35,10 +35,17 @@ export class ArcherState extends Schema {
   declare deathTimer: number;
   declare spawnIframeTimer: number;
   declare dodgeIframeTimer: number;
-  // Phase 9a — special-arrow inventory (count of bomb arrows held).
-  // Phase 9b will add drillInventory / laserInventory / hasShield in
-  // the same flat shape.
+  // Phase 9a — bomb-arrow inventory.
   declare bombInventory: number;
+  // Phase 9b — drill / laser / shield. Kept as separate flat fields
+  // (parallel to bombInventory) rather than refactoring into a single
+  // typed-stack ArraySchema, since we still only have 4 inventory
+  // counters + 1 boolean. A typed-stack refactor would also require
+  // each client to walk an ArraySchema per archer per frame, which is
+  // strictly more wire traffic for the same information.
+  declare drillInventory: number;
+  declare laserInventory: number;
+  declare hasShield: boolean;
 
   constructor() {
     super();
@@ -55,6 +62,9 @@ export class ArcherState extends Schema {
     this.spawnIframeTimer = 0;
     this.dodgeIframeTimer = 0;
     this.bombInventory = 0;
+    this.drillInventory = 0;
+    this.laserInventory = 0;
+    this.hasShield = false;
   }
 }
 
@@ -72,4 +82,7 @@ defineTypes(ArcherState, {
   spawnIframeTimer: "uint16",
   dodgeIframeTimer: "uint16",
   bombInventory: "uint8",
+  drillInventory: "uint8",
+  laserInventory: "uint8",
+  hasShield: "boolean",
 });

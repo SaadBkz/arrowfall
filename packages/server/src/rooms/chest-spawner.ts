@@ -1,5 +1,7 @@
 import {
   CHEST_BOMB_LOOT_COUNT,
+  CHEST_DRILL_LOOT_COUNT,
+  CHEST_LASER_LOOT_COUNT,
   CHEST_MAX_SIMULTANEOUS,
   CHEST_NORMAL_LOOT_COUNT,
   CHEST_SPAWN_MAX_INTERVAL_FRAMES,
@@ -9,21 +11,22 @@ import {
 } from "@arrowfall/shared";
 import { type Chest, type ChestContents } from "@arrowfall/engine";
 
-// Phase 9a — server-side chest spawner. Lives outside the engine
+// Phase 9a/9b — server-side chest spawner. Lives outside the engine
 // because chest spawn cadence and loot are non-deterministic (random
 // timing, random contents) — the engine stays pure / deterministic and
 // only knows how to *step* a chest once it exists.
 //
-// Loot table for 9a — only Normal and Bomb arrows ship in this phase.
-// The 5%/15%/10% slots from spec §6.2 (shield/drill/laser) get folded
-// into the two available types until Phase 9b widens the table:
-//   60% : 2 normal arrows
-//   40% : 2 bomb arrows
+// Phase 9b loot table (spec §6.2 — full set):
+//   50 % : 2 normal arrows
+//   20 % : 2 bomb arrows
+//   15 % : 2 drill arrows
+//   10 % : 2 laser arrows
+//    5 % : 1 shield (consumes a single lethal hit)
 //
 // PRNG: Math.random(). Spawn cadence and loot don't need to be
-// reproducible across rooms / replays — single seedless RNG keeps the
-// spawner trivially testable via Math.random monkey-patching (see
-// chest-spawner.test.ts).
+// reproducible across rooms / replays — the server is authoritative
+// and broadcasts the resolved chest, so cross-client reproducibility
+// is automatic. Tests monkey-patch Math.random to lock the schedule.
 
 export type ChestIdAllocator = () => string;
 
@@ -31,6 +34,21 @@ export type ChestSpawnerConfig = {
   readonly chestSpawnsTilesPx: ReadonlyArray<Vec2>; // pixel coordinates of CHEST_SPAWN tiles
   readonly nextChestId: ChestIdAllocator;
 };
+
+// Loot table thresholds — cumulative bands on a [0, 1) roll. Order
+// matters; the first band whose upper bound exceeds the roll wins.
+// Centralised so chest-spawner.test.ts can assert each band lands its
+// intended contents.
+export const CHEST_LOOT_BANDS: ReadonlyArray<{
+  readonly upperBound: number;
+  readonly contents: ChestContents;
+}> = [
+  { upperBound: 0.5, contents: { kind: "arrows", type: "normal", count: CHEST_NORMAL_LOOT_COUNT } },
+  { upperBound: 0.7, contents: { kind: "arrows", type: "bomb", count: CHEST_BOMB_LOOT_COUNT } },
+  { upperBound: 0.85, contents: { kind: "arrows", type: "drill", count: CHEST_DRILL_LOOT_COUNT } },
+  { upperBound: 0.95, contents: { kind: "arrows", type: "laser", count: CHEST_LASER_LOOT_COUNT } },
+  { upperBound: 1.0, contents: { kind: "shield" } },
+];
 
 export class ChestSpawner {
   private readonly chestSpawnsPx: ReadonlyArray<Vec2>;
@@ -101,10 +119,12 @@ export class ChestSpawner {
   }
 
   private rollLoot(): ChestContents {
-    if (Math.random() < 0.6) {
-      return { type: "normal", count: CHEST_NORMAL_LOOT_COUNT };
+    const r = Math.random();
+    for (const band of CHEST_LOOT_BANDS) {
+      if (r < band.upperBound) return band.contents;
     }
-    return { type: "bomb", count: CHEST_BOMB_LOOT_COUNT };
+    // Math.random() is < 1.0 but defensive: fall back to the last band.
+    return CHEST_LOOT_BANDS[CHEST_LOOT_BANDS.length - 1]!.contents;
   }
 }
 
