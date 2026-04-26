@@ -1,6 +1,7 @@
 import type { World } from "@arrowfall/engine";
 import { ArcherState } from "./archer-state.js";
 import { ArrowState } from "./arrow-state.js";
+import { ChestState } from "./chest-state.js";
 import type { MatchState } from "./match-state.js";
 
 // Mutate `state` in place to mirror `world`. Idempotent: calling it twice
@@ -56,6 +57,7 @@ export const worldToMatchState = (
     s.deathTimer = archer.deathTimer;
     s.spawnIframeTimer = archer.spawnIframeTimer;
     s.dodgeIframeTimer = archer.dodgeIframeTimer;
+    s.bombInventory = archer.bombInventory;
     seenSessions.add(sessionId);
   }
   for (const sessionId of [...state.archers.keys()]) {
@@ -84,12 +86,43 @@ export const worldToMatchState = (
     s.ownerId = arrow.ownerId;
     s.status = arrow.status;
     s.groundedTimer = arrow.groundedTimer;
+    s.arrowType = arrow.type;
     seenArrows.add(arrow.id);
   }
   for (let i = state.arrows.length - 1; i >= 0; i--) {
     const s = state.arrows[i];
     if (s !== undefined && !seenArrows.has(s.id)) {
       state.arrows.splice(i, 1);
+    }
+  }
+
+  // Phase 9a — chests. Same upsert/prune pattern as arrows.
+  const chestsByIdInState = new Map<string, ChestState>();
+  for (let i = 0; i < state.chests.length; i++) {
+    const s = state.chests[i];
+    if (s !== undefined) chestsByIdInState.set(s.id, s);
+  }
+  const seenChests = new Set<string>();
+  for (const chest of world.chests) {
+    let s = chestsByIdInState.get(chest.id);
+    if (s === undefined) {
+      s = new ChestState();
+      s.id = chest.id;
+      state.chests.push(s);
+    }
+    s.posX = chest.pos.x;
+    s.posY = chest.pos.y;
+    s.status = chest.status;
+    s.openTimer = chest.openTimer;
+    s.openerId = chest.openerId ?? "";
+    s.lootType = chest.contents.type;
+    s.lootCount = chest.contents.count;
+    seenChests.add(chest.id);
+  }
+  for (let i = state.chests.length - 1; i >= 0; i--) {
+    const s = state.chests[i];
+    if (s !== undefined && !seenChests.has(s.id)) {
+      state.chests.splice(i, 1);
     }
   }
 

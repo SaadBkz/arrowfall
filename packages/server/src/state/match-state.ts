@@ -1,6 +1,7 @@
 import { ArraySchema, MapSchema, Schema, defineTypes } from "@colyseus/schema";
 import { ArcherState } from "./archer-state.js";
 import { ArrowState } from "./arrow-state.js";
+import { ChestState } from "./chest-state.js";
 
 // Top-level wire state. Replicated to every connected client.
 //
@@ -48,6 +49,9 @@ export class MatchState extends Schema {
   declare archers: MapSchema<ArcherState>;
   declare arrows: ArraySchema<ArrowState>;
   declare lastInputTick: MapSchema<number>;
+  // Phase 9a — chests on the map. Mirrors World.chests; renderer reads
+  // status to switch closed/opening sprites.
+  declare chests: ArraySchema<ChestState>;
 
   // Phase 8.
   declare roomCode: string;
@@ -67,6 +71,7 @@ export class MatchState extends Schema {
     this.archers = new MapSchema<ArcherState>();
     this.arrows = new ArraySchema<ArrowState>();
     this.lastInputTick = new MapSchema<number>();
+    this.chests = new ArraySchema<ChestState>();
 
     this.roomCode = "";
     this.phase = "lobby";
@@ -86,6 +91,7 @@ defineTypes(MatchState, {
   archers: { map: ArcherState },
   arrows: [ArrowState],
   lastInputTick: { map: "uint32" },
+  chests: [ChestState],
 
   roomCode: "string",
   phase: "string",
