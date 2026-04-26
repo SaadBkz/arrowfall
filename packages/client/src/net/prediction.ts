@@ -43,7 +43,6 @@ type RenderCorrection = {
 // this — the local World is the source of truth there.
 export class PredictionEngine {
   private readonly mapData: MapData;
-  private readonly spawnsPx: ReadonlyArray<Vec2>;
   // Monotonic counter — assigned to each input tagged on the wire and
   // used as the key for pendingInputs. Never reset (see arena-room
   // handleReset comment); this is a local clock, not round state.
@@ -53,12 +52,11 @@ export class PredictionEngine {
   private localSlotId: string | null = null;
   private correction: RenderCorrection | null = null;
 
+  // `spawnsPx` is only used to seed the empty pre-connect world.
+  // After the first reconcile, the world is rebuilt from server
+  // snapshots via matchStateToWorld, which uses the same mapData.
   constructor(mapData: MapData, spawnsPx: ReadonlyArray<Vec2>) {
     this.mapData = mapData;
-    this.spawnsPx = spawnsPx;
-    // Empty until first reconcile. createWorld requires at least one
-    // spawn point even for an empty roster; we already validated the
-    // map at Game construction.
     this.predictedWorld = createWorld(mapData, spawnsPx, []);
   }
 
