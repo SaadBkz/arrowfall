@@ -2,27 +2,35 @@
 
 ## Stratégie
 
-**100% procédural CC0**. Aucun fichier d'asset binaire (PNG/WAV/OGG) n'est versionné dans ce repo. Tous les visuels sont générés au démarrage du client par le code TypeScript sous `packages/client/src/assets/`.
+**Hybride CC0** depuis Phase 10.5b : un seul pack pixel art CC0 vendoré (Kenney's Tiny Dungeon) fournit les tiles SOLID + le sprite archer base ; tout le reste (backgrounds, frames, vignette, fog, decorations, arrows, chests, shields) est généré procéduralement au démarrage par le code TypeScript sous `packages/client/src/assets/`.
 
-## Liste des assets générés et leur source
+## Pack tiers — Tiny Dungeon (Kenney)
+
+- **Source** : <https://kenney.nl/assets/tiny-dungeon>
+- **Auteur** : Kenney Vleugels (kenney.nl)
+- **Licence** : CC0 1.0 Universal (Public Domain)
+- **Vendoré sous** : `packages/client/public/assets/cc0/kenney/tiny-dungeon.png` + `tiny-dungeon-LICENSE.txt`
+- **Format** : 12 cols × 11 rows de tiles 16×16 px, gap 1 px (5.5 KB)
+- **Utilisation dans ArrowFall** :
+  - 4 tiles de pierre (rows 1-3 de la grille) → `SOLID_0..3` par thème, multipliés par un `theme tint` à la génération.
+  - 1 tile knight (row 7 col 1) → archer body, multiplié par le `skin tint` pour les 6 slots.
+- **Code intégration** : `cc0-loader.ts` (slice + tint), `cc0-mapping.ts` (table d'indices + tints), `cc0-tiles.ts`, `cc0-archers.ts`.
+
+## Liste des assets et leur source
 
 | Asset | Source | Auteur | Licence |
 |---|---|---|---|
-| Tilesheet `sacred-grove` (8 tiles) | `packages/client/src/assets/tile-painter.ts` + `palettes.ts` | ArrowFall procedural generator | CC0 |
-| Tilesheet `twin-spires` (8 tiles) | idem | idem | CC0 |
-| Tilesheet `old-temple` (8 tiles) | idem | idem | CC0 |
-| Spritesheet Verdant (~40 frames) | `packages/client/src/assets/archer-painter.ts` | ArrowFall procedural generator | CC0 |
-| Spritesheet Crimson (~40 frames) | idem | idem | CC0 |
-| Spritesheet Azure (~40 frames) | idem | idem | CC0 |
-| Spritesheet Saffron (~40 frames) | idem | idem | CC0 |
-| Spritesheet Onyx (~40 frames) | idem | idem | CC0 |
-| Spritesheet Frost (~40 frames) | idem | idem | CC0 |
-| Arrow sprites normal/bomb/drill/laser | `packages/client/src/assets/arrow-painter.ts` | ArrowFall procedural generator | CC0 |
-| Chest sprite + 6 opening frames | `packages/client/src/assets/chest-painter.ts` | ArrowFall procedural generator | CC0 |
-| Background Sacred Grove (parallax ×2) | `packages/client/src/assets/background-painter.ts` | ArrowFall procedural generator | CC0 |
-| Background Twin Spires (parallax ×2) | idem | idem | CC0 |
-| Background Old Temple (parallax ×2) | idem | idem | CC0 |
-| Shield ring + sigils overlay | `packages/client/src/assets/shield-painter.ts` | ArrowFall procedural generator | CC0 |
+| **SOLID tiles 0..3** (3 thèmes × 4 variantes, theme-tinted) | `cc0-tiles.ts` slicing `tiny-dungeon.png` | Kenney Vleugels | CC0 |
+| **Archer body sprite** (1 base × 6 skin tints) | `cc0-archers.ts` slicing `tiny-dungeon.png` | Kenney Vleugels | CC0 |
+| Tiles SOLID_4..7 + SOLID_FACE + JUMPTHRU + SPIKE (3 thèmes) | `tile-painter.ts` + `palettes.ts` | ArrowFall procedural generator | CC0 |
+| Frame panels 32×270 (3 thèmes × 2 sides) | `frame-painter.ts` | ArrowFall procedural generator | CC0 |
+| Vignette 480×270 RGBA | `vignette-painter.ts` | ArrowFall procedural generator | CC0 |
+| Fog 256×270 tileable (3 thèmes) | `fog-painter.ts` | ArrowFall procedural generator | CC0 |
+| Backgrounds 480×270 (3 thèmes × 2 layers) | `background-painter.ts` | ArrowFall procedural generator | CC0 |
+| Decorations (3 thèmes × ~7 props) | `decoration-painter.ts` | ArrowFall procedural generator | CC0 |
+| Arrows normal/bomb/drill/laser | `arrow-painter.ts` | ArrowFall procedural generator | CC0 |
+| Chests + 6 opening frames | `chest-painter.ts` | ArrowFall procedural generator | CC0 |
+| Shield ring + sigils overlay | `shield-painter.ts` | ArrowFall procedural generator | CC0 |
 
 ## Inspiration créative (non-redistribuée)
 

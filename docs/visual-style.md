@@ -4,14 +4,15 @@ Ce document est le **contrat artistique** de la Phase 10. Toute décision visuel
 
 ## 0. Stratégie d'asset
 
-**100% procédural CC0**, généré côté client via HTML5 Canvas au boot, puis converti en `PIXI.Texture` pour le rendu. Pas un seul fichier binaire d'asset n'est versionné. Avantages :
+**Hybride CC0** depuis Phase 10.5b : un seul pack pixel art CC0 vendoré (Kenney's Tiny Dungeon, 5.5 KB) couvre les éléments à plus forte densité visuelle (tiles SOLID, archer body) avec une qualité difficilement atteignable en procédural. Tout le reste (frames, vignette, fog, backgrounds, decorations, arrows, chests, shields) est généré au boot via HTML5 Canvas → PIXI.Texture.
 
-- CC0 par construction (notre code, notre licence — voir `assets/CREDITS.md`).
-- Bundle léger (~0 KB d'assets, gain ~1.5 MB sur un pack équivalent).
-- Reproductible et tunable (changer une palette = re-build, pas re-paint).
-- Zéro risque légal : aucun pixel TowerFall n'est extrait.
+Avantages :
+- Qualité visuelle : tiles + archers passent du procédural "moche" à la fidélité Kenney en quelques fonctions.
+- CC0 par construction : Kenney est CC0 1.0 Universal, notre code est sous la licence projet — voir `assets/CREDITS.md`.
+- Bundle reste léger : 5.5 KB de PNG vendoré + ~250 KB de code procédural.
+- Zéro risque légal : aucun pixel TowerFall extrait.
 
-Le code générateur vit sous `packages/client/src/assets/`. La fonction `buildAllAssets()` est appelée une fois au démarrage par `main.ts` et retourne un `AssetRegistry` injecté dans `Game`.
+Le code générateur vit sous `packages/client/src/assets/`. La fonction `buildAllAssets()` est désormais **async** : elle charge d'abord la sprite-sheet CC0 via `loadCC0Sheet()`, puis bake les canvases avant retour de l'`AssetRegistry`. Si le chargement CC0 échoue (offline, CSP), on retombe sur la pipeline 100% procédurale (visuellement dégradée mais fonctionnelle).
 
 ## 1. Résolution & grille
 
