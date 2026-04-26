@@ -65,6 +65,8 @@ const overlappingArrow = (
   status: "flying",
   age: 0,
   groundedTimer: 0,
+  piercesUsed: 0,
+  bouncesUsed: 0,
 });
 
 describe("stepWorld — arrow ↔ archer death", () => {

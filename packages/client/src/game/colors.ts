@@ -28,6 +28,18 @@ export const ARROW_GROUNDED_COLOR = 0x888888;
 // (rare path — bombs usually explode rather than ground).
 export const BOMB_FLYING_COLOR = 0xff4040;
 export const BOMB_GROUNDED_COLOR = 0xb04040;
+// Phase 9b — drill arrow: bright orange in flight, darker once
+// embedded. The orange palette reads "industrial / heavy" vs the
+// crisp white of normal arrows.
+export const DRILL_FLYING_COLOR = 0xff8c1a;
+export const DRILL_GROUNDED_COLOR = 0xa66020;
+// Phase 9b — laser arrow: pure white in flight, never grounds in
+// practice (despawns on bounce-cap or lifetime); the GROUNDED tint is
+// kept for symmetry with the other types.
+export const LASER_FLYING_COLOR = 0xfafff5;
+export const LASER_GROUNDED_COLOR = 0xb0c0b0;
+// Phase 9b — shield ring around the archer body. Soft pulsing white.
+export const SHIELD_COLOR = 0xc8f0ff;
 // Chest colors — closed = warm gold, opening = brighter flash.
 export const CHEST_CLOSED_COLOR = 0xd4a64a;
 export const CHEST_OPENING_COLOR = 0xfde08a;

@@ -16,15 +16,50 @@
 | **7** | Client prediction + reconciliation + interpolation | latence ressentie < 100 ms | ✅ |
 | **8** | Lobby, code de room 4 lettres, écran fin de round/match | match complet 2 joueurs distants | ✅ |
 | **9a** | Coffres + flèche Bomb (loot + explosion) | match avec coffres et explosions | ✅ |
-| **9b** | Flèches Drill + Laser + Shield (mécaniques restantes) | mécaniques complètes | ⏳ |
+| **9b** | Flèches Drill + Laser + Shield (mécaniques restantes) | mécaniques complètes | ✅ |
 | **10** | 3 maps designées + intégration assets pixel art CC0 | jeu visuel complet | ⏳ |
 | **11** | SFX + musique CC0 + polish + gamepad + fullscreen | MVP livré | ⏳ |
+
+## Phase 9b — Flèches Drill + Laser + Shield (terminé)
+
+✅ Livrée dans la PR `feat/arrows-shield-9b` : *(URL backfill après merge)*
+
+- **`@arrowfall/shared/constants/arrows`** — nouveau module : `ArrowType` (canonical home, re-exporté par engine pour back-compat), `ArrowProfile` (`speed`, `gravity`, `impact`), table `ARROW_PROFILES` keyée par type. Centralise les vitesses/gravités spec §4.2 dans une seule source de vérité — `stepArrow`, `applyShoot` et `dropArrowsOnDeath` lisent désormais via `arrowProfile(type).speed` au lieu de switcher.
+- **Drill arrow** (`ARROW_PROFILES.drill = { speed: 5, gravity: true, impact: "pierce" }`) — `Arrow.piercesUsed: number` (0 au spawn). `stepArrow` au premier hit SOLID : `piercesUsed=1`, position avancée par le delta complet (pas de re-sweep dans le même frame), continue à voler. Au 2e hit : impact "embed" (downgrade implicite quand `piercesUsed >= DRILL_MAX_PIERCES=1`). Test de référence : un mur isolé col 10 + un mur vertical col 14 → drill traverse le 1er, embed dans le 2e.
+- **Laser arrow** (`speed: 7`, `gravity: false`, `impact: "bounce"`) — `Arrow.bouncesUsed: number`. `stepArrow` au hit SOLID : reflète la composante perpendiculaire (`vx → -vx` si `xResult.hit`, idem Y), `bouncesUsed++`. Coin (xy hit simultané) → flip les deux. Despawn (status="exploding" silent — pas d'event) après `LASER_MAX_BOUNCES=7` rebonds OU `age >= LASER_LIFETIME_FRAMES=30`. Pas de gravité = trajectoire purement linéaire entre rebonds.
+- **`Archer.hasShield: boolean`** + `drillInventory` + `laserInventory` — 3 champs ajoutés au type Archer (compteurs séparés plutôt que `inventory: ArrowType[]` — on est à 4 compteurs + 1 bool, en-dessous du seuil de refactor noté Phase 9a). `applyShoot` priorité **laser > drill > bomb > normal** (les spéciaux se consomment en premier — UX "loot impactful"). `dropArrowsOnDeath` éjecte normals → bombs → drills → lasers dans le même fan déterministe avec speed propre via `ARROW_PROFILES`.
+- **Shield consume hit dans `stepWorld`** — branchement dans les 3 sources de mort (étape 5 bomb explosion, étape 6 arrow direct, étape 7 stomp) : si la victime a `hasShield=true`, on flippe à `false` et on émet `WorldEvent.shield-broken { victimId, cause: "arrow"|"bomb"|"stomp", tick }` au lieu de `archer-killed`. Stomp : le stompeur rebondit même si la cible était shielded (l'impact mécanique reste). Friendly fire respecté (sa propre bomb consomme son shield).
+- **`ChestContents` discriminated union** — `{ kind: "arrows", type: ArrowType, count } | { kind: "shield" }`. Wire flatten : `lootKind` ("arrows" | "shield"), `lootType` (ignoré si shield), `lootCount` (idem). `applyChestLootToInventory` : `kind="shield"` → `archer.hasShield=true` (no-op si déjà true), `kind="arrows"` → bump compteur typé.
+- **`ChestSpawner` loot table 9b** (spec §6.2 complète) — bandes cumulatives sur `[0,1)` :
+  - 50% : 2 normal arrows
+  - 20% : 2 bomb arrows
+  - 15% : 2 drill arrows
+  - 10% : 2 laser arrows
+  - 5% : 1 shield
+  Exposée comme `CHEST_LOOT_BANDS` (testable via `Math.random` monkey-patché).
+- **Wire schema** : `ArcherState` gagne `drillInventory`, `laserInventory` (uint8), `hasShield` (boolean). `ChestState` gagne `lootKind` (string). `worldToMatchState` mirror les nouveaux champs ; chests `kind="shield"` mettent `lootType="normal"` / `lootCount=0` (sentinelles, ignorés client-side).
+- **Client** :
+  - Schema mirror lockstep + `match-mirror.chestFromState` parse `lootKind` pour reconstruire la `ChestContents` discriminée.
+  - `ArrowsRenderer` : palettes par type via lookup `FLYING_COLOR_BY_TYPE` (drill `0xff8c1a` orange, laser `0xfafff5` blanc) ; les lasers ont un halo low-alpha sous le poly principal pour l'effet "rayon".
+  - `ArchersRenderer` : cercle blanc pulsé (`SHIELD_COLOR=0xc8f0ff`) sous le corps quand `hasShield=true` (alpha 0.4..0.85 sur 30 frames, indépendant de l'engine state).
+  - `HudRenderer` : ligne d'inventaire typée — `N3/5 B2 D1 L0 [+] alive`. Slots vides silencieux ; `[+]` indique le shield.
+- **Tradeoffs** :
+  - Pas de FX d'explosion bomb (toujours déféré à Phase 11) ni de particules drill/laser sur impact.
+  - Le PRNG ChestSpawner reste `Math.random` non-seedé (la cohérence cross-client est garantie par le broadcast serveur, pas par un seed partagé — c'est l'architecture autoritaire spec §8.1).
+  - Inventaires drill/laser/shield des archers REMOTES non-interpolés (`archerFromSnapshot` met 0/false) — visible uniquement via la mirror state directement, comme `bombInventory` Phase 9a.
+- **Tests** : engine 147 → **163** (+16 : `arrow/drill.test.ts` 4 cas, `arrow/laser.test.ts` 5 cas, `world/shield.test.ts` 7 cas). Server 72 → **75** (+3 net : retiré 2 tests 60/40 obsolètes, ajouté 5 nouveaux pour les 5 bandes du loot table 9b). Client 30 inchangé.
+- **Validation manuelle** (à exécuter au merge) :
+  1. Two tabs sur `http://localhost:5173/`, host + join + ready up.
+  2. Attendre 4-8 s : un coffre apparaît. Avec 50%/20%/15%/10%/5% on devrait voir des contenus variés sur ~10 ouvertures.
+  3. Coffre drill → tirer → flèche orange, traverse un bloc SOLID, embed dans le suivant.
+  4. Coffre laser → tirer → flèche blanche avec halo, rebondit sur les murs, disparaît après quelques rebonds ou ~30 frames.
+  5. Coffre shield → cercle blanc pulsé apparaît autour de l'archer ; encaisser un coup → cercle disparaît, archer survit.
 
 ## Phase 9a — Coffres + flèche Bomb (terminé)
 
 ✅ Livrée dans la PR `feat/chests-arrows` : *(URL backfill après merge)*
 
-> Phase 9 a été splittée en deux sous-PRs vu le scope (~3000 lignes total). Phase 9a livre coffres + Bomb (la moitié spectaculaire : loot + explosion). Phase 9b finira avec Drill + Laser + Shield.
+> Phase 9 a été splittée en deux sous-PRs vu le scope (~3000 lignes total). Phase 9a livre coffres + Bomb (la moitié spectaculaire : loot + explosion). Phase 9b finit avec Drill + Laser + Shield et le loot table complet spec §6.2.
 
 - **`getRoundOutcome` shared via `@arrowfall/engine/round-state`** — déjà extrait Phase 8, inchangé ici.
 - **Bomb arrow** (`@arrowfall/engine/arrow`) — `ArrowType` étendu en `"normal" | "bomb"`. Constants : `BOMB_ARROW_SPEED=4.5`, `BOMB_FUSE_FRAMES=60`, `BOMB_RADIUS_PX=24`. `ArrowStatus` gagne `"exploding"` (transient, vit ≤ 1 tick — jamais visible sur le wire). `stepArrow` flippe le status dès qu'`age >= BOMB_FUSE` ou collision wall ; sinon physique normale (semi-implicit Euler + sweep SOLID).

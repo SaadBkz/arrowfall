@@ -1,12 +1,12 @@
 import {
   type ArcherInput,
-  ARROW_SPEED,
-  BOMB_ARROW_SPEED,
   aimVector,
+  arrowProfile,
+  type ArrowType,
   MAX_INVENTORY,
   SHOOT_COOLDOWN_FRAMES,
 } from "@arrowfall/shared";
-import { ARROW_H, ARROW_W, type Arrow, type ArrowType } from "../arrow/types.js";
+import { ARROW_H, ARROW_W, type Arrow } from "../arrow/types.js";
 import { ARCHER_HITBOX_H, ARCHER_HITBOX_W, type Archer } from "./types.js";
 
 export type ShootResult = {
@@ -20,18 +20,19 @@ export type ShootResult = {
 //   - state === 'idle' (cannot shoot during a dodge)
 //   - input.shoot edge is high
 //   - shootCooldownTimer === 0 (post-cooldown)
-//   - inventory > 0 (sum of normal + bomb counts)
+//   - some inventory > 0 (any of normal/bomb/drill/laser counters)
 //
-// Phase 9a — special-arrow priority: bombs are spent first when held.
-// Rationale: a player who picks up bombs from a chest typically wants
-// the explosion now, not later. If you grab bombs but want to shoot
-// normals, dodge a few times to expend the bombs… or not — TowerFall's
-// MVP doesn't have an inventory selector, so this is the simplest
-// rule that makes loot feel impactful.
+// Phase 9a/9b — special-arrow priority. Lasers fire first, then drills,
+// then bombs, then normals. Rationale: a player who picks up specials
+// from a chest typically wants them spent NOW (they're powerful and
+// scarce); normals are the fallback ammo. TowerFall's MVP doesn't have
+// an inventory selector, so this priority makes loot feel impactful
+// and the special types meaningful.
 //
 // On a successful shot we decrement the appropriate counter, reset
 // shootCooldownTimer to SHOOT_COOLDOWN_FRAMES, and emit one Arrow whose
-// type/speed match the slot fired.
+// type/speed match the slot fired (ARROW_PROFILES is the source of
+// truth for muzzle speed by type).
 //
 // id is fully deterministic — built from the World's `${ownerId}-arrow-
 // ${tick}-${shootCounter}`-style suffix passed in as `idSuffix`. We do
@@ -46,23 +47,29 @@ export const applyShoot = (
   if (!input.shoot) return { archer, newArrow: null };
   if (archer.shootCooldownTimer > 0) return { archer, newArrow: null };
 
-  // Pick the type to fire. Bombs first (Phase 9a), then normals.
+  // Pick the type to fire — laser > drill > bomb > normal.
   let firedType: ArrowType;
-  let muzzleSpeed: number;
   let nextNormalInventory = archer.inventory;
   let nextBombInventory = archer.bombInventory;
-  if (archer.bombInventory > 0) {
+  let nextDrillInventory = archer.drillInventory;
+  let nextLaserInventory = archer.laserInventory;
+  if (archer.laserInventory > 0) {
+    firedType = "laser";
+    nextLaserInventory = Math.max(0, Math.min(MAX_INVENTORY, archer.laserInventory - 1));
+  } else if (archer.drillInventory > 0) {
+    firedType = "drill";
+    nextDrillInventory = Math.max(0, Math.min(MAX_INVENTORY, archer.drillInventory - 1));
+  } else if (archer.bombInventory > 0) {
     firedType = "bomb";
-    muzzleSpeed = BOMB_ARROW_SPEED;
     nextBombInventory = Math.max(0, Math.min(MAX_INVENTORY, archer.bombInventory - 1));
   } else if (archer.inventory > 0) {
     firedType = "normal";
-    muzzleSpeed = ARROW_SPEED;
     nextNormalInventory = Math.max(0, Math.min(MAX_INVENTORY, archer.inventory - 1));
   } else {
     return { archer, newArrow: null };
   }
 
+  const muzzleSpeed = arrowProfile(firedType).speed;
   const dir = aimVector(input, archer.facing);
 
   // Centre of the body in pixel space, then offset by half a body-width
@@ -81,6 +88,8 @@ export const applyShoot = (
     status: "flying",
     age: 0,
     groundedTimer: 0,
+    piercesUsed: 0,
+    bouncesUsed: 0,
   };
 
   return {
@@ -88,6 +97,8 @@ export const applyShoot = (
       ...archer,
       inventory: nextNormalInventory,
       bombInventory: nextBombInventory,
+      drillInventory: nextDrillInventory,
+      laserInventory: nextLaserInventory,
       shootCooldownTimer: SHOOT_COOLDOWN_FRAMES,
     },
     newArrow,

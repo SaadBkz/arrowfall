@@ -30,12 +30,20 @@ export type Archer = {
   readonly deathTimer: number; // frames since death; client uses this for the
   // fragmentation animation, world uses it to despawn after DEATH_DURATION_FRAMES
   readonly spawnIframeTimer: number; // > 0 → arrows pass through, stomp ignored
-  // Phase 9a — special-arrow inventory. Bombs share the same MAX_INVENTORY
-  // cap as normal arrows but are tracked in a separate counter so the wire
-  // schema stays a flat (uint8, uint8) instead of a typed stack. Phase 9b
-  // adds drillInventory / laserInventory / hasShield in the same shape; if
-  // we hit ~5 of these we'll refactor to a single typed array.
+  // Phase 9a/9b — special-arrow inventory. Each special type lives in
+  // its own counter so the wire schema stays a flat row of uint8s
+  // (typed-stack refactor deferred until we add a 5th special type).
+  // applyShoot consumes them in priority order: laser > drill > bomb >
+  // normal — picked-up specials get fired before the player's stock
+  // normals, which matches the "loot is impactful" UX intent.
   readonly bombInventory: number;
+  readonly drillInventory: number;
+  readonly laserInventory: number;
+  // Phase 9b — shield. true after a shield pickup; absorbs the next
+  // lethal hit (arrow / bomb / stomp) and is consumed in the process,
+  // emitting a `shield-broken` event. No timer: the shield lasts until
+  // it's used or the round ends (a fresh round resets via createArcher).
+  readonly hasShield: boolean;
 };
 
 export const createArcher = (
@@ -60,6 +68,9 @@ export const createArcher = (
   deathTimer: 0,
   spawnIframeTimer: SPAWN_IFRAME_FRAMES,
   bombInventory: 0,
+  drillInventory: 0,
+  laserInventory: 0,
+  hasShield: false,
 });
 
 // Re-exported so callers can build their own AABB from an Archer without

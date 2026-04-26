@@ -21,9 +21,9 @@ import {
 import { dropArrowsOnDeath } from "../arrow/drop.js";
 import { stepArrow } from "../arrow/step.js";
 import { type Arrow, arrowAabb } from "../arrow/types.js";
-import { type Chest, chestAabb } from "../chest/types.js";
+import { type Chest, type ChestContents, chestAabb } from "../chest/types.js";
 import { stepChest } from "../chest/step.js";
-import { type World, type WorldEvent } from "./types.js";
+import { type ArcherKillCause, type World, type WorldEvent } from "./types.js";
 
 const archerBodyAabb = (a: Archer): AABB => ({
   x: a.pos.x,
@@ -61,34 +61,36 @@ const explosionAabb = (cx: number, cy: number, r: number): AABB => ({
 //   1. Snapshot archer ids in alphabetical order. Every iteration below
 //      walks this same sorted list — JS Map insertion order is *not*
 //      relied upon during stepping.
-//   2. applyShoot per archer → list of new arrows. Each new arrow's id
-//      uses `${ownerId}-arrow-${tick}` (one shot per archer per frame).
+//   2. applyShoot per archer → list of new arrows.
 //   3. stepArcher per archer (advances physics + decrements timers).
-//   4. stepArrow per existing arrow (sorted by id). Phase 9a: bomb
-//      arrows can transition to status="exploding" here.
-//   5. Resolve bomb explosions (Phase 9a) — for every arrow now in the
-//      "exploding" state, kill all alive archers intersecting the
-//      blast AABB (modulo iframes), emit a bomb-exploded event, and
-//      mark the arrow for removal. Done BEFORE archer/arrow collisions
-//      so a bomb landing on an archer kills via explosion, not via the
-//      arrow's flying-impact code path (the bomb is no longer flying).
-//   6. Resolve arrow ↔ archer collisions (normal arrow flying impacts).
-//   7. Stomp (bouncing on heads).
-//   8. Pickup (grounded/embedded arrows). Phase 9a: arrow.type drives
-//      which inventory counter is incremented.
-//   9. Chests (Phase 9a): stepChest decrements openTimer; closed chests
-//      check for an alive-archer overlap to trigger the open animation;
-//      mid-open chests with openTimer === 0 deliver loot to the opener.
+//   4. stepArrow per existing arrow (sorted by id). Bombs flip to
+//      "exploding" here on fuse / wall hit; lasers despawn (also via
+//      "exploding") on bounce-cap or lifetime.
+//   5. Resolve arrows in status="exploding":
+//        - bomb → blast AABB, kill alive archers in range (or break
+//          their shield). Emits bomb-exploded + per-victim events.
+//        - laser → silent removal (no event).
+//      Done BEFORE arrow/archer collisions so a bomb landing on an
+//      archer kills via explosion, not via the arrow's flying-impact
+//      code path.
+//   6. Resolve arrow ↔ archer collisions (flying-arrow direct hits).
+//      Phase 9b: shield absorbs the hit and breaks (no death).
+//   7. Stomp (bouncing on heads). Phase 9b: shield absorbs the stomp
+//      kill (the stomper still bounces — only the victim's shield is
+//      consumed, since the stomp itself was a deflected attack).
+//   8. Pickup of grounded/embedded arrows. Type-aware: each ArrowType
+//      bumps its matching inventory counter.
+//   9. Chests: stepChest decrements openTimer; closed chests check
+//      for an alive-archer overlap to trigger the open animation;
+//      mid-open chests with openTimer === 0 deliver loot to the
+//      opener (ChestContents discriminated union: arrows vs shield).
 //  10. Drop arrows for archers that died this frame (deterministic fan).
 //  11. Despawn dead archers whose deathTimer >= DEATH_DURATION_FRAMES.
 //  12. Build final arrows / chests, bump tick.
 //
-// SPIKE handling: Phase 2 left SPIKE non-blocking for the archer body
-// (the player does not collide with it, only the engine "knows" the
-// tile is lethal). For Phase 3+ we leave that as-is — wiring spike-kill
-// adds a second probe loop and a 'spike' kill-event branch but no new
-// netcode surface; deferred. The 'spike' cause exists in the event
-// union so a future wiring can plug in without a schema bump.
+// SPIKE handling: still non-blocking for the archer body (Phase 2
+// behaviour). The 'spike' kill cause exists in the event union for a
+// future wiring pass without a schema bump.
 export const stepWorld = (
   world: World,
   inputs: ReadonlyMap<string, ArcherInput>,
@@ -99,8 +101,7 @@ export const stepWorld = (
   // 1. Stable iteration order.
   const sortedIds = [...world.archers.keys()].sort();
 
-  // 2. Shoot phase. Each archer fires at most once per frame; the id
-  //    suffix is just `${tick}` since `${ownerId}` already namespaces it.
+  // 2. Shoot phase.
   const newArrows: Arrow[] = [];
   const afterShoot = new Map<string, Archer>();
   for (const id of sortedIds) {
@@ -131,22 +132,24 @@ export const stepWorld = (
   const sortedArrows = sortById(world.arrows);
   const arrowsNow: Arrow[] = sortedArrows.map((a) => stepArrow(a, world.map));
 
-  // 5–8 work on a mutable working map / array; we re-build the
-  // immutable World at the end.
   const archerNow = new Map<string, Archer>();
   for (const id of sortedIds) archerNow.set(id, afterStep.get(id)!);
 
   const removedArrowIds = new Set<string>();
   const killedArchers: Archer[] = [];
 
-  // 5. Bomb explosions. Process in id order so events stay deterministic
-  //    when several bombs detonate the same frame. An archer caught in
-  //    multiple blasts the same tick still dies once (subsequent
-  //    explosions skip dead archers).
+  // 5. Bomb explosions / laser despawns. Process in id order.
   for (const arrow of arrowsNow) {
     if (arrow.status !== "exploding") continue;
     if (removedArrowIds.has(arrow.id)) continue;
 
+    if (arrow.type === "laser") {
+      // Laser lifetime / bounce-cap exhausted — silent removal.
+      removedArrowIds.add(arrow.id);
+      continue;
+    }
+
+    // Bomb (or any future explode-type): resolve the blast.
     const blast = explosionAabb(arrow.pos.x, arrow.pos.y, BOMB_RADIUS_PX);
     for (const archerId of sortedIds) {
       let archer = archerNow.get(archerId)!;
@@ -157,6 +160,22 @@ export const stepWorld = (
       if (archer.spawnIframeTimer > 0) continue;
       if (archer.dodgeIframeTimer > 0) continue;
       if (!aabbIntersects(blast, archerBodyAabb(archer))) continue;
+
+      // Phase 9b — shield absorbs the explosion: archer survives,
+      // shield consumed, shield-broken event emitted instead of
+      // archer-killed. Friendly fire still applies (a player caught
+      // in their own bomb's blast loses their shield).
+      if (archer.hasShield) {
+        archer = { ...archer, hasShield: false };
+        archerNow.set(archerId, archer);
+        events.push({
+          kind: "shield-broken",
+          victimId: archerId,
+          cause: "bomb",
+          tick,
+        });
+        continue;
+      }
 
       archer = { ...archer, alive: false, deathTimer: 0 };
       archerNow.set(archerId, archer);
@@ -180,9 +199,7 @@ export const stepWorld = (
     });
   }
 
-  // 6. Arrow ↔ archer collisions (death / catch). Bombs in flight count
-  //    too: a hit catches/kills with the same rules. (Bombs that already
-  //    exploded are status="exploding" and were filtered above.)
+  // 6. Arrow ↔ archer collisions (death / catch / shield).
   for (const archerId of sortedIds) {
     let archer = archerNow.get(archerId)!;
     if (!archer.alive) continue;
@@ -201,8 +218,8 @@ export const stepWorld = (
 
       if (archer.dodgeIframeTimer > 0) {
         // Catch: +1 to the matching inventory slot, arrow removed,
-        // event emitted. Catching a bomb is a great defensive move
-        // (you now hold an explosive you can throw back).
+        // event emitted. Catching a special is great defensively
+        // (you now hold the same explosive/drill/laser to throw back).
         archer = applyCatchToInventory(archer, arrow);
         archerNow.set(archerId, archer);
         removedArrowIds.add(arrow.id);
@@ -214,6 +231,31 @@ export const stepWorld = (
         });
         // Continue checking other arrows — multiple simultaneous hits
         // during a dodge are all caught (TowerFall behaviour).
+        continue;
+      }
+
+      // Phase 9b — shield absorbs the hit. Arrow still gets embedded
+      // (arrow is consumed by the impact, same as a normal kill) but
+      // the archer survives without their shield.
+      if (archer.hasShield) {
+        archer = { ...archer, hasShield: false };
+        archerNow.set(archerId, archer);
+        arrowsNow[i] = {
+          ...arrow,
+          status: "embedded",
+          vel: { x: 0, y: 0 },
+          groundedTimer: ARROW_GROUNDED_PICKUP_DELAY,
+        };
+        events.push({
+          kind: "shield-broken",
+          victimId: archerId,
+          cause: "arrow",
+          tick,
+        });
+        // Shield is gone — but we keep iterating arrows because a
+        // simultaneous *second* arrow this frame would now kill the
+        // un-shielded archer. Without this loop continue, two arrows
+        // in the same tick could both whiff harmlessly.
         continue;
       }
 
@@ -259,10 +301,26 @@ export const stepWorld = (
 
       if (!aabbIntersects(bodyA, archerHeadAabb(b))) continue;
 
+      // Stomper always bounces, even on a shielded target — the kick
+      // off the head is mechanical, regardless of whether the target
+      // dies.
       archerNow.set(aId, {
         ...a,
         vel: { x: a.vel.x, y: STOMP_BOUNCE_VELOCITY },
       });
+
+      // Phase 9b — shield absorbs the stomp.
+      if (b.hasShield) {
+        archerNow.set(bId, { ...b, hasShield: false });
+        events.push({
+          kind: "shield-broken",
+          victimId: bId,
+          cause: "stomp",
+          tick,
+        });
+        continue;
+      }
+
       const dead = { ...b, alive: false, deathTimer: 0 };
       archerNow.set(bId, dead);
       killedArchers.push(dead);
@@ -276,10 +334,7 @@ export const stepWorld = (
     }
   }
 
-  // 8. Pickup. Type-aware: a grounded bomb (rare — they normally
-  //    explode rather than land — but possible if it grounded before
-  //    Phase 9a in a save state, or via a future arrow type) bumps
-  //    bombInventory; everything else bumps the normal counter.
+  // 8. Pickup. Type-aware: each ArrowType bumps its matching counter.
   for (const archerId of sortedIds) {
     let archer = archerNow.get(archerId)!;
     if (!archer.alive) continue;
@@ -288,13 +343,7 @@ export const stepWorld = (
       if (removedArrowIds.has(arrow.id)) continue;
       if (arrow.status !== "grounded" && arrow.status !== "embedded") continue;
       if (arrow.groundedTimer > 0) continue;
-      // Per-type cap: each inventory slot maxes at MAX_INVENTORY.
-      // Skip if the matching slot is already full.
-      const slotFull =
-        arrow.type === "bomb"
-          ? archer.bombInventory >= MAX_INVENTORY
-          : archer.inventory >= MAX_INVENTORY;
-      if (slotFull) continue;
+      if (slotFullFor(archer, arrow.type)) continue;
       if (!aabbIntersects(archerBodyAabb(archer), arrowAabb(arrow))) continue;
 
       archer = applyCatchToInventory(archer, arrow);
@@ -309,14 +358,15 @@ export const stepWorld = (
     }
   }
 
-  // 9. Chests (Phase 9a). Step timers, then in this same pass:
+  // 9. Chests. Step timers, then in this same pass:
   //    closed → opening when an alive archer overlaps;
   //    opening + timer=0 → deliver loot + emit event + remove.
   //
   //    Stable iteration order: chests are sorted by id, archer
   //    contact-check walks sortedIds. Loot is added to the opener at
   //    delivery time only; if the opener died between trigger and
-  //    delivery, the chest is still consumed but no inventory bump.
+  //    delivery, the chest is still consumed but no inventory bump
+  //    (and no shield grant).
   // `world.chests` is required by the type but tests routinely build
   // World stubs without it — coalescing keeps stepWorld backward-
   // compatible for those harnesses while production code (createWorld
@@ -365,21 +415,19 @@ export const stepWorld = (
     }
   }
 
-  // 10. Drop arrows for archers that died this frame. The drop happens
-  //     AFTER pickup so a player who walks onto a corpse doesn't
-  //     instantly grab the very arrows that just spawned (they're flying
-  //     initially, so pickup wouldn't apply anyway, but ordering it last
-  //     is conceptually cleaner).
+  // 10. Drop arrows for archers that died this frame.
   const dropArrows: Arrow[] = [];
   for (const dead of killedArchers) {
     const drops = dropArrowsOnDeath(dead, `${dead.id}-death-${tick}`);
     dropArrows.push(...drops);
-    // Zero out inventory so the dead body doesn't appear to still hold
-    // arrows in any HUD/snapshot.
+    // Zero out inventories so the dead body doesn't appear to still
+    // hold arrows in any HUD/snapshot.
     archerNow.set(dead.id, {
       ...archerNow.get(dead.id)!,
       inventory: 0,
       bombInventory: 0,
+      drillInventory: 0,
+      laserInventory: 0,
     });
   }
 
@@ -409,39 +457,87 @@ export const stepWorld = (
   };
 };
 
+// Per-type cap helper — each inventory slot maxes at MAX_INVENTORY.
+const slotFullFor = (archer: Archer, type: Arrow["type"]): boolean => {
+  switch (type) {
+    case "bomb":
+      return archer.bombInventory >= MAX_INVENTORY;
+    case "drill":
+      return archer.drillInventory >= MAX_INVENTORY;
+    case "laser":
+      return archer.laserInventory >= MAX_INVENTORY;
+    case "normal":
+    default:
+      return archer.inventory >= MAX_INVENTORY;
+  }
+};
+
 // Helper: handle pickup OR catch of an arrow — both bump the matching
 // inventory slot and clamp at MAX_INVENTORY. Centralised so the pickup
 // loop and catch branch can't drift on the cap rule.
 const applyCatchToInventory = (archer: Archer, arrow: Arrow): Archer => {
-  if (arrow.type === "bomb") {
-    return {
-      ...archer,
-      bombInventory: Math.min(MAX_INVENTORY, archer.bombInventory + 1),
-    };
+  switch (arrow.type) {
+    case "bomb":
+      return {
+        ...archer,
+        bombInventory: Math.min(MAX_INVENTORY, archer.bombInventory + 1),
+      };
+    case "drill":
+      return {
+        ...archer,
+        drillInventory: Math.min(MAX_INVENTORY, archer.drillInventory + 1),
+      };
+    case "laser":
+      return {
+        ...archer,
+        laserInventory: Math.min(MAX_INVENTORY, archer.laserInventory + 1),
+      };
+    case "normal":
+    default:
+      return {
+        ...archer,
+        inventory: Math.min(MAX_INVENTORY, archer.inventory + 1),
+      };
   }
-  return {
-    ...archer,
-    inventory: Math.min(MAX_INVENTORY, archer.inventory + 1),
-  };
 };
 
-// Helper: deliver chest loot to an opener's inventory. Per-type cap at
-// MAX_INVENTORY (overflow drops are silently lost — Phase 9a accepts
-// this; a Phase 9b inventory rework with a typed stack would surface
-// the same behaviour without the dual counter).
+// Helper: deliver chest loot to an opener's inventory. Discriminated
+// on contents.kind:
+//   - "arrows" : bumps the matching inventory slot, clamped at
+//                MAX_INVENTORY (overflow is silently lost).
+//   - "shield" : sets archer.hasShield=true (no-op if already true).
 const applyChestLootToInventory = (
   archer: Archer,
-  contents: { readonly type: Arrow["type"]; readonly count: number },
+  contents: ChestContents,
 ): Archer => {
-  if (contents.count <= 0) return archer;
-  if (contents.type === "bomb") {
-    return {
-      ...archer,
-      bombInventory: Math.min(MAX_INVENTORY, archer.bombInventory + contents.count),
-    };
+  if (contents.kind === "shield") {
+    return { ...archer, hasShield: true };
   }
-  return {
-    ...archer,
-    inventory: Math.min(MAX_INVENTORY, archer.inventory + contents.count),
-  };
+  if (contents.count <= 0) return archer;
+  switch (contents.type) {
+    case "bomb":
+      return {
+        ...archer,
+        bombInventory: Math.min(MAX_INVENTORY, archer.bombInventory + contents.count),
+      };
+    case "drill":
+      return {
+        ...archer,
+        drillInventory: Math.min(MAX_INVENTORY, archer.drillInventory + contents.count),
+      };
+    case "laser":
+      return {
+        ...archer,
+        laserInventory: Math.min(MAX_INVENTORY, archer.laserInventory + contents.count),
+      };
+    case "normal":
+    default:
+      return {
+        ...archer,
+        inventory: Math.min(MAX_INVENTORY, archer.inventory + contents.count),
+      };
+  }
 };
+
+// Re-export for type narrowing in archer-killed cause unions.
+export type { ArcherKillCause };

@@ -44,10 +44,17 @@ const archerFromState = (s: ArcherState): Archer => ({
   deathTimer: s.deathTimer,
   spawnIframeTimer: s.spawnIframeTimer,
   bombInventory: s.bombInventory,
+  drillInventory: s.drillInventory,
+  laserInventory: s.laserInventory,
+  hasShield: s.hasShield,
 });
 
-const arrowTypeFromState = (raw: string): ArrowType =>
-  raw === "bomb" ? "bomb" : "normal";
+const arrowTypeFromState = (raw: string): ArrowType => {
+  if (raw === "bomb") return "bomb";
+  if (raw === "drill") return "drill";
+  if (raw === "laser") return "laser";
+  return "normal";
+};
 
 const arrowFromState = (s: ArrowState): Arrow => ({
   id: s.id,
@@ -64,6 +71,8 @@ const arrowFromState = (s: ArrowState): Arrow => ({
         : "flying") as Arrow["status"],
   age: 0,
   groundedTimer: s.groundedTimer,
+  piercesUsed: 0,
+  bouncesUsed: 0,
 });
 
 const chestStatusFromState = (raw: string): ChestStatus =>
@@ -75,7 +84,14 @@ const chestFromState = (s: ChestState): Chest => ({
   status: chestStatusFromState(s.status),
   openTimer: s.openTimer,
   openerId: s.openerId === "" ? null : s.openerId,
-  contents: { type: arrowTypeFromState(s.lootType), count: s.lootCount },
+  contents:
+    s.lootKind === "shield"
+      ? { kind: "shield" }
+      : {
+          kind: "arrows",
+          type: arrowTypeFromState(s.lootType),
+          count: s.lootCount,
+        },
 });
 
 // Reads the schema synchronously and produces a fresh World. Cheap

@@ -48,6 +48,8 @@ const makeBomb = (overrides: Partial<Arrow> = {}): Arrow => ({
   status: "flying",
   age: 0,
   groundedTimer: 0,
+  piercesUsed: 0,
+  bouncesUsed: 0,
   ...overrides,
 });
 
@@ -102,6 +104,8 @@ describe("bomb arrow — wall hit", () => {
       status: "flying",
       age: 0,
       groundedTimer: 0,
+      piercesUsed: 0,
+      bouncesUsed: 0,
     };
     const next = stepArrow(arrow, map);
     expect(next.status).toBe("grounded");

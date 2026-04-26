@@ -152,3 +152,46 @@ La hitbox tête est juste le sous-AABB des 3 px supérieurs du corps — pas un 
 pnpm demo:combat
 # → 600 frames de trace : tick=N | p1: pos=(x,y) inv=I alive=Y/N | p2: ... | events=[...]
 ```
+
+## Types de flèches (Phase 9a/9b)
+
+`ArrowType` est canoniquement défini dans `@arrowfall/shared/constants/arrows` (re-exporté depuis l'engine pour back-compat). Chaque type a un profil dans `ARROW_PROFILES` qui pilote `stepArrow` :
+
+| Type | Speed (px/frame) | Gravity | Impact mode | Spec ref |
+|---|---|---|---|---|
+| `normal` | 5.0 | oui | `embed` (grounded sur sol, embedded sur mur) | §4.2 |
+| `bomb` | 4.5 | oui | `explode` (au mur OU `age >= 60` → blast AABB ±24 px) | §4.2 |
+| `drill` | 5.0 | oui | `pierce` (1× SOLID puis fallback `embed`) | §4.2 |
+| `laser` | 7.0 | non | `bounce` (jusqu'à 7×, puis despawn ; ou `age >= 30`) | §4.2 |
+
+**Bramble** et **Feather** sont explicitement hors-MVP (spec §13).
+
+### Inventaires par type (Phase 9b)
+
+L'archer a 4 compteurs séparés + 1 booléen :
+
+```ts
+archer.inventory       // normal arrows (spawn = SPAWN_ARROW_COUNT, cap MAX_INVENTORY)
+archer.bombInventory   // bomb arrows (cap MAX_INVENTORY)
+archer.drillInventory  // drill arrows (cap MAX_INVENTORY)
+archer.laserInventory  // laser arrows (cap MAX_INVENTORY)
+archer.hasShield       // boolean — absorbe un coup mortel puis se brise
+```
+
+`applyShoot` priorité **laser > drill > bomb > normal** : tirer alors qu'on a au moins une flèche spéciale dans le sac consomme la spéciale. C'est l'UX "loot impactful" — un joueur qui ramasse un drill veut le tirer maintenant.
+
+### Shield consume hit
+
+Quand un archer avec `hasShield=true` reçoit un coup mortel (arrow direct, blast bomb, stomp), `stepWorld` flippe `hasShield=false` au lieu de tuer et émet `WorldEvent.shield-broken { victimId, cause: "arrow"|"bomb"|"stomp" }`. Le stompeur rebondit même contre une cible shielded (l'impact mécanique reste). Friendly fire respecté : sa propre bomb consomme son propre shield.
+
+### Coffres (`@arrowfall/engine/chest`)
+
+`ChestContents` est une union discriminée :
+
+```ts
+type ChestContents =
+  | { kind: "arrows"; type: ArrowType; count: number }
+  | { kind: "shield" };
+```
+
+Le serveur (`ChestSpawner`) tire le contenu via `Math.random` non-seedé (cohérence cross-client garantie par broadcast autoritaire — pas par un seed partagé) selon la table spec §6.2 : 50% normal×2 / 20% bomb×2 / 15% drill×2 / 10% laser×2 / 5% shield. L'engine est pur — il ne fait que livrer le contenu à l'opener quand `openTimer` atteint 0.

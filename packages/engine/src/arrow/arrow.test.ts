@@ -33,6 +33,8 @@ const flyingE = (x: number, y: number, owner = "shooter"): Arrow => ({
   status: "flying",
   age: 0,
   groundedTimer: 0,
+  piercesUsed: 0,
+  bouncesUsed: 0,
 });
 
 describe("stepArrow — ballistics (E direction, hand table)", () => {
@@ -117,6 +119,8 @@ describe("stepArrow — SPIKE pass-through", () => {
       status: "flying",
       age: 0,
       groundedTimer: 0,
+      piercesUsed: 0,
+      bouncesUsed: 0,
     };
     let arrow = arrow0;
     let crossedSpike = false;
@@ -144,6 +148,8 @@ describe("stepArrow — grounded/embedded inertia", () => {
       status: "grounded",
       age: 50,
       groundedTimer: ARROW_GROUNDED_PICKUP_DELAY,
+      piercesUsed: 0,
+      bouncesUsed: 0,
     };
     const map = blankMap();
     let a = grounded;
