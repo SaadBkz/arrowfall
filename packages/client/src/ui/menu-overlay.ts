@@ -120,18 +120,24 @@ export class MenuOverlay {
 
   // Lobby view. Re-renders on every state patch; cheap because the
   // panel is < 200 nodes deep.
+  //
+  // All `state.X?` fallbacks are defenses against the @colyseus/schema
+  // 3.x decoder bypassing our constructor (Object.create), which leaves
+  // collection fields undefined until the server emits a patch touching
+  // them. The lobby renders on every state-change so this can fire on
+  // a partial state.
   showLobby(state: MatchState, mySessionId: string, onToggleReady: () => void): void {
     this.root.classList.remove("hidden");
-    const isReady = state.ready.get(mySessionId) === true;
-    const playerCount = state.archers.size;
+    const isReady = state.ready?.get(mySessionId) === true;
+    const playerCount = state.archers?.size ?? 0;
     const ready = countReady(state);
-    const code = escapeHtml(state.roomCode);
+    const code = escapeHtml(state.roomCode ?? "");
 
     let rosterHtml = "";
-    state.archers.forEach((archer, sessionId) => {
+    state.archers?.forEach((archer, sessionId) => {
       const slot = escapeHtml(archer.id);
       const me = sessionId === mySessionId ? " (you)" : "";
-      const isPlayerReady = state.ready.get(sessionId) === true;
+      const isPlayerReady = state.ready?.get(sessionId) === true;
       rosterHtml += `
         <div class="row">
           <span>${slot}${me}</span>
@@ -170,8 +176,9 @@ export class MenuOverlay {
   // until the next phase change.
   showMatchEnd(state: MatchState, mySessionId: string): void {
     this.root.classList.remove("hidden");
-    const winnerSessionId = state.matchWinnerSessionId;
-    const winnerArcher = winnerSessionId !== "" ? state.archers.get(winnerSessionId) : undefined;
+    const winnerSessionId = state.matchWinnerSessionId ?? "";
+    const winnerArcher =
+      winnerSessionId !== "" ? state.archers?.get(winnerSessionId) : undefined;
     const winnerLabel =
       winnerSessionId === ""
         ? "No winner"
@@ -180,20 +187,20 @@ export class MenuOverlay {
           : `${(winnerArcher?.id ?? winnerSessionId).toUpperCase()} wins!`;
 
     let scoresHtml = "";
-    state.archers.forEach((archer, sessionId) => {
+    state.archers?.forEach((archer, sessionId) => {
       const slot = escapeHtml(archer.id);
       const me = sessionId === mySessionId ? " (you)" : "";
-      const wins = state.wins.get(sessionId) ?? 0;
-      scoresHtml += `<div class="row"><span>${slot}${me}</span><span>${wins} / ${state.targetWins}</span></div>`;
+      const wins = state.wins?.get(sessionId) ?? 0;
+      scoresHtml += `<div class="row"><span>${slot}${me}</span><span>${wins} / ${state.targetWins ?? 0}</span></div>`;
     });
 
-    const seconds = Math.max(0, Math.ceil(state.phaseTimer / 60));
+    const seconds = Math.max(0, Math.ceil((state.phaseTimer ?? 0) / 60));
 
     this.root.innerHTML = `
       <div class="menu-panel match-end">
         <h1 class="menu-title">MATCH OVER</h1>
         <div class="winner">${escapeHtml(winnerLabel)}</div>
-        <p class="scores">First to ${state.targetWins}</p>
+        <p class="scores">First to ${state.targetWins ?? 0}</p>
         <div class="lobby-roster">${scoresHtml}</div>
         <p class="menu-status">Returning to lobby in ${seconds}s...</p>
       </div>
@@ -212,7 +219,7 @@ export class MenuOverlay {
 
 const countReady = (state: MatchState): number => {
   let n = 0;
-  state.ready.forEach((v) => {
+  state.ready?.forEach((v) => {
     if (v) n += 1;
   });
   return n;

@@ -398,15 +398,26 @@ export class Game {
   // Build the "p1 1 / p2 0" string shown in the HUD during networked
   // play. Uses the slot id (p1..p6) so colors line up with the rest
   // of the UI.
+  //
+  // Defensive against a quirk of @colyseus/schema 3.x: the wire decoder
+  // bypasses our MatchState constructor (Object.create) and only
+  // populates collection fields once the server emits a patch touching
+  // them. During the very first ticks after attachRoom, `archers` /
+  // `wins` can be undefined, which used to throw at .forEach() and kill
+  // the ticker.
   private formatScoreBadge(): string {
     if (this.room === null) return "";
+    const state = this.room.state;
+    const archers = state.archers;
+    const wins = state.wins;
+    if (archers === undefined) return "";
     const parts: string[] = [];
-    this.room.state.archers.forEach((archer, sessionId) => {
-      const wins = this.room!.state.wins.get(sessionId) ?? 0;
-      parts.push(`${archer.id} ${wins}`);
+    archers.forEach((archer, sessionId) => {
+      const w = wins?.get(sessionId) ?? 0;
+      parts.push(`${archer.id} ${w}`);
     });
     parts.sort();
-    const target = this.room.state.targetWins;
+    const target = state.targetWins ?? 0;
     return `${parts.join(" / ")} (to ${target})`;
   }
 
@@ -420,11 +431,13 @@ export class Game {
     | { readonly kind: "win"; readonly winnerId: string }
     | { readonly kind: "draw" } {
     if (this.room === null) return { kind: "ongoing" };
-    const phase = this.room.state.phase;
-    if (phase !== "round-end") return { kind: "ongoing" };
-    const winnerSession = this.room.state.roundWinnerSessionId;
+    const state = this.room.state;
+    if (state.phase !== "round-end") return { kind: "ongoing" };
+    const winnerSession = state.roundWinnerSessionId;
     if (winnerSession === "") return { kind: "draw" };
-    const winnerArcher = this.room.state.archers.get(winnerSession);
+    // Same @colyseus/schema 3.x quirk as formatScoreBadge — archers can
+    // be undefined for one tick after attachRoom.
+    const winnerArcher = state.archers?.get(winnerSession);
     if (winnerArcher === undefined) return { kind: "draw" };
     return { kind: "win", winnerId: winnerArcher.id };
   }

@@ -113,6 +113,11 @@ export class PredictionEngine {
   // the slot id is recorded as a side effect (the server is the source
   // of truth for slot allocation).
   reconcile(state: MatchState, mySessionId: string): void {
+    // Defensive `?.` against @colyseus/schema 3.x — see match-mirror.
+    // If archers/lastInputTick aren't decoded yet we just skip; the
+    // next state-change tick will fire reconcile again.
+    if (state.archers === undefined) return;
+
     // Resolve / refresh slot id. The server can change our slot id
     // across rejoins (Phase 8 territory) but for Phase 7 it's stable.
     const myArcherState = state.archers.get(mySessionId);
@@ -120,7 +125,7 @@ export class PredictionEngine {
       this.localSlotId = myArcherState.id;
     }
 
-    const ackedTick = state.lastInputTick.get(mySessionId) ?? 0;
+    const ackedTick = state.lastInputTick?.get(mySessionId) ?? 0;
     // Keep only inputs the server hasn't acked yet. Strict > so that
     // the input *exactly* acked is dropped (the server already applied
     // its effect and reflects it in the snapshot).
