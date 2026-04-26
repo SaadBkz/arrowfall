@@ -138,4 +138,55 @@ describe("ArenaRoom", () => {
     room.tickForTest();
     expect(room.state.tick).toBe(t0 + 2);
   });
+
+  it("mirrors the latest clientTick from input payloads into state.lastInputTick", () => {
+    const room = setup();
+    room.onJoin(fakeClient("a"), {});
+    room.handleInput("a", { ...NEUTRAL_INPUT, clientTick: 5 });
+    room.tickForTest();
+    expect(room.state.lastInputTick.get("a")).toBe(5);
+
+    room.handleInput("a", { ...NEUTRAL_INPUT, clientTick: 7 });
+    room.tickForTest();
+    expect(room.state.lastInputTick.get("a")).toBe(7);
+  });
+
+  it("ignores out-of-order clientTicks (monotonic per session)", () => {
+    const room = setup();
+    room.onJoin(fakeClient("a"), {});
+    room.handleInput("a", { ...NEUTRAL_INPUT, clientTick: 10 });
+    room.tickForTest();
+    expect(room.state.lastInputTick.get("a")).toBe(10);
+
+    // Replayed packet — must not roll the ack back.
+    room.handleInput("a", { ...NEUTRAL_INPUT, clientTick: 3 });
+    room.tickForTest();
+    expect(room.state.lastInputTick.get("a")).toBe(10);
+  });
+
+  it("does not advance lastInputTick on a malformed payload", () => {
+    const room = setup();
+    room.onJoin(fakeClient("a"), {});
+    room.handleInput("a", { ...NEUTRAL_INPUT, clientTick: 4 });
+    room.tickForTest();
+    expect(room.state.lastInputTick.get("a")).toBe(4);
+
+    // Bogus shape: validateClientTick returns null so the ack stays put.
+    room.handleInput("a", { totally: "wrong" });
+    room.tickForTest();
+    expect(room.state.lastInputTick.get("a")).toBe(4);
+  });
+
+  it("drops state.lastInputTick when the session leaves", () => {
+    const room = setup();
+    room.onJoin(fakeClient("a"), {});
+    room.handleInput("a", { ...NEUTRAL_INPUT, clientTick: 11 });
+    room.tickForTest();
+    expect(room.state.lastInputTick.has("a")).toBe(true);
+
+    room.onLeave(fakeClient("a"), false);
+    // After a tick the mirror prunes the entry.
+    room.tickForTest();
+    expect(room.state.lastInputTick.has("a")).toBe(false);
+  });
 });
