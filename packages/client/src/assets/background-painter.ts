@@ -103,11 +103,13 @@ const paintClouds = (g: CanvasRenderingContext2D, p: ThemePalette): void => {
 };
 
 const paintSunGlow = (g: CanvasRenderingContext2D, p: ThemePalette): void => {
-  g.globalAlpha = 0.25;
-  for (let r = 50; r > 10; r -= 5) {
+  // Phase 10.5b — toned down: was 50 px radius, eye-grabbing huge sun.
+  // TowerFall Sacred Forest uses sky-as-backdrop, not sky-as-feature.
+  g.globalAlpha = 0.20;
+  for (let r = 22; r > 6; r -= 4) {
     g.fillStyle = p.metal[2];
     g.beginPath();
-    g.arc(420, 50, r, 0, Math.PI * 2);
+    g.arc(430, 38, r, 0, Math.PI * 2);
     g.fill();
   }
   g.globalAlpha = 1;

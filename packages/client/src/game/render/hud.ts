@@ -1,11 +1,17 @@
 import { type World } from "@arrowfall/engine";
 import { MAX_INVENTORY } from "@arrowfall/shared";
-import { Container, Text, TextStyle } from "pixi.js";
+import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import { archerColorFor, HUD_TEXT_COLOR } from "../colors.js";
 
 const LINE_HEIGHT = 10;
 const FONT_SIZE = 8;
 const PADDING = 4;
+// Phase 10.5b — opaque dark band behind HUD text so red/colored
+// player names stay readable on bright daytime backgrounds (Sacred
+// Grove sky was washing out red on red-on-cyan).
+const HUD_BG_COLOR = 0x000000;
+const HUD_BG_ALPHA = 0.55;
+const HUD_BG_PADDING = 3;
 
 const baseStyle = (fill: number): TextStyle =>
   new TextStyle({
@@ -26,11 +32,18 @@ export type HudBadge = string | null;
 // Multiple Text objects is simpler and cheap enough for ≤ 4 lines.
 export class HudRenderer {
   readonly view: Container;
+  private readonly bg: Graphics;
   private readonly playerLines: Map<string, Text> = new Map();
   private readonly footer: Text;
 
   constructor() {
     this.view = new Container();
+
+    // Phase 10.5b — Dark translucent backdrop sized dynamically each
+    // frame to wrap whichever lines are visible. Drawn before the
+    // text so HUD reads on any background.
+    this.bg = new Graphics();
+    this.view.addChild(this.bg);
 
     // Footer (badge, arrows count, fps, reset hint) shares one Text —
     // same colour, multi-line.
@@ -94,6 +107,28 @@ export class HudRenderer {
       `[Backspace] reset`,
     );
     this.footer.text = lines.join("\n");
+
+    // Phase 10.5b — size the dark backdrop to cover all the visible
+    // lines plus a few pixels of padding. The footer is multi-line so
+    // its height = `lines.length * LINE_HEIGHT`. We also need to wrap
+    // the widest text line — but Pixi Text exposes `.width` after
+    // text is set, so we can read that directly.
+    const totalH = y + lines.length * LINE_HEIGHT - PADDING + HUD_BG_PADDING;
+    let maxW = 0;
+    for (const line of this.playerLines.values()) {
+      if (line.width > maxW) maxW = line.width;
+    }
+    if (this.footer.width > maxW) maxW = this.footer.width;
+    const totalW = maxW + HUD_BG_PADDING * 2;
+    this.bg.clear();
+    this.bg
+      .rect(
+        PADDING - HUD_BG_PADDING,
+        PADDING - HUD_BG_PADDING,
+        totalW,
+        totalH,
+      )
+      .fill({ color: HUD_BG_COLOR, alpha: HUD_BG_ALPHA });
   }
 
   dispose(): void {
@@ -102,6 +137,7 @@ export class HudRenderer {
     }
     this.playerLines.clear();
     this.footer.destroy();
+    this.bg.destroy();
     this.view.destroy();
   }
 }

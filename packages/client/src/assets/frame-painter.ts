@@ -12,7 +12,7 @@
 // so the renderer can position without a heuristic.
 
 import type { ThemeId } from "@arrowfall/shared";
-import { mulberry32, newCanvas, px, rect, vGradient } from "./canvas.js";
+import { newCanvas, px, rect, vGradient } from "./canvas.js";
 import { PALETTES, type ThemePalette } from "./palettes.js";
 
 export const FRAME_PANEL_W = 32;
@@ -82,72 +82,38 @@ const paintInnerEdgeShadow = (
 
 // ── Sacred Grove ──────────────────────────────────────────────────
 //
-// Stone column with crawling moss + small wood totems at top + bottom +
-// midway mascarons. Warm green/wood palette.
+// Phase 10.5b — simplified: clean stone pillar with ONE focal
+// mascaron at vertical centre. No more 3 stacked faces (user feedback:
+// they read as "stamp grid"). Cap top + bottom are subtle wood bands.
 const paintSacredFrame = (
   g: CanvasRenderingContext2D,
   p: ThemePalette,
   side: FrameSide,
 ): void => {
-  const rng = mulberry32(seedOf("sacred-grove", side));
+  void side;
 
-  // Brick-like horizontal courses every 18 px — break the column up
-  // visually so it doesn't read as one tall bar.
-  for (let y = 8; y < FRAME_PANEL_H; y += 18) {
-    rect(g, 2, y, FRAME_PANEL_W - 4, 1, p.stone[0]);
-    rect(g, 2, y - 1, FRAME_PANEL_W - 4, 1, p.stone[2]);
-  }
+  // Top wood-band cap (8 px) — subtle, no carved-face look.
+  rect(g, 0, 0, FRAME_PANEL_W, 8, p.wood[1]);
+  rect(g, 0, 0, FRAME_PANEL_W, 1, p.wood[2]);
+  rect(g, 0, 7, FRAME_PANEL_W, 1, p.wood[0]);
+  rect(g, 0, 3, FRAME_PANEL_W, 1, p.metal[1]); // single gold pinstripe
 
-  // Wood totem cap at top (16 px tall).
-  rect(g, 4, 0, FRAME_PANEL_W - 8, 16, p.wood[1]);
-  rect(g, 4, 0, FRAME_PANEL_W - 8, 1, p.wood[2]);
-  rect(g, 4, 14, FRAME_PANEL_W - 8, 2, p.wood[0]);
-  rect(g, 5, 4, FRAME_PANEL_W - 10, 1, p.metal[1]); // gold band
-  rect(g, 5, 10, FRAME_PANEL_W - 10, 1, p.metal[1]);
-  // Carved leaf glyph centred.
-  rect(g, 12, 6, 8, 3, p.accent[0]);
-  px(g, 13, 5, p.accent[1]);
-  px(g, 18, 5, p.accent[1]);
-  px(g, 15, 9, p.accent[2]);
-  px(g, 16, 9, p.accent[2]);
+  // Bottom wood-band cap (8 px).
+  rect(g, 0, FRAME_PANEL_H - 8, FRAME_PANEL_W, 8, p.wood[1]);
+  rect(g, 0, FRAME_PANEL_H - 8, FRAME_PANEL_W, 1, p.wood[2]);
+  rect(g, 0, FRAME_PANEL_H - 1, FRAME_PANEL_W, 1, p.wood[0]);
+  rect(g, 0, FRAME_PANEL_H - 5, FRAME_PANEL_W, 1, p.metal[1]);
 
-  // Wood totem foot at bottom (mirrors top).
-  const footY = FRAME_PANEL_H - 16;
-  rect(g, 4, footY, FRAME_PANEL_W - 8, 16, p.wood[1]);
-  rect(g, 4, footY, FRAME_PANEL_W - 8, 1, p.wood[2]);
-  rect(g, 4, FRAME_PANEL_H - 1, FRAME_PANEL_W - 8, 1, p.wood[0]);
-  rect(g, 5, footY + 4, FRAME_PANEL_W - 10, 1, p.metal[1]);
-  rect(g, 5, footY + 11, FRAME_PANEL_W - 10, 1, p.metal[1]);
+  // ONE focal leaf mascaron at vertical centre — y=125 puts it
+  // exactly mid-frame (270 height, 20 face height → centre 125).
+  paintLeafMascaron(g, 8, 125, p);
 
-  // Two carved mascaron faces — small leaf-crowned heads, deterministic
-  // y positions in the middle band.
-  const faceYs = [70, 180];
-  for (const fy of faceYs) {
-    paintLeafMascaron(g, 8, fy, p);
-  }
-
-  // Crawling moss patches — alpha 0.6 patches scattered. Roughly 20
-  // patches per panel, varied size.
-  g.globalAlpha = 0.55;
-  for (let i = 0; i < 22; i++) {
-    const mx = Math.floor(rng() * (FRAME_PANEL_W - 6)) + 2;
-    const my = Math.floor(rng() * (FRAME_PANEL_H - 8)) + 4;
-    const w = 2 + Math.floor(rng() * 3);
-    const h = 1 + Math.floor(rng() * 2);
-    rect(g, mx, my, w, h, p.accent[0]);
-    if (rng() > 0.5) px(g, mx, my, p.accent[1]);
-  }
-  g.globalAlpha = 1;
-
-  // Hanging vine on the inner column edge.
-  const vineX = side === "left" ? FRAME_PANEL_W - 6 : 4;
-  for (let y = 18; y < FRAME_PANEL_H - 18; y++) {
-    if (y % 3 === 0) px(g, vineX + (y % 6 < 3 ? 0 : 1), y, p.accent[1]);
-    if (y % 11 === 5) {
-      px(g, vineX - 1, y, p.accent[2]);
-      px(g, vineX + 1, y, p.accent[2]);
-    }
-  }
+  // Two horizontal stone courses framing the mascaron — break the
+  // empty space without re-introducing repetition.
+  rect(g, 0, 60, FRAME_PANEL_W, 1, p.stone[0]);
+  rect(g, 0, 61, FRAME_PANEL_W, 1, p.stone[2]);
+  rect(g, 0, 200, FRAME_PANEL_W, 1, p.stone[0]);
+  rect(g, 0, 201, FRAME_PANEL_W, 1, p.stone[2]);
 };
 
 const paintLeafMascaron = (
@@ -186,78 +152,27 @@ const paintSpiresFrame = (
   p: ThemePalette,
   side: FrameSide,
 ): void => {
-  const rng = mulberry32(seedOf("twin-spires", side));
+  void side;
 
-  // Vertical "marble vein" lines — 3 of them, staggered.
-  for (const [vx, alpha] of [
-    [6, 0.35],
-    [16, 0.5],
-    [24, 0.3],
-  ] as ReadonlyArray<readonly [number, number]>) {
-    g.globalAlpha = alpha;
-    for (let y = 0; y < FRAME_PANEL_H; y++) {
-      const off = Math.round(Math.sin(y * 0.06 + vx) * 1.2);
-      px(g, vx + off, y, p.accent[2]);
-    }
-    g.globalAlpha = 1;
-  }
+  // Phase 10.5b — simplified: clean cold-stone pillar with ONE focal
+  // banner mid-frame. No more icicle clusters, no scattered snow, no
+  // marble vein noise — those all read as visual chaos at frame size.
 
-  // Stone block courses every 24 px (taller than sacred — feels more
-  // monumental).
-  for (let y = 12; y < FRAME_PANEL_H; y += 24) {
-    rect(g, 1, y, FRAME_PANEL_W - 2, 1, p.stone[0]);
-    rect(g, 1, y - 1, FRAME_PANEL_W - 2, 1, p.stone[3]);
-  }
+  // Top stone cap with snow (8 px) — subtle.
+  rect(g, 0, 0, FRAME_PANEL_W, 8, p.stone[2]);
+  rect(g, 0, 0, FRAME_PANEL_W, 3, p.accent[3]); // snow
+  rect(g, 0, 3, FRAME_PANEL_W, 1, p.accent[2]);
 
-  // Top: stone cap with snow piled on.
-  rect(g, 0, 0, FRAME_PANEL_W, 12, p.stone[2]);
-  rect(g, 0, 0, FRAME_PANEL_W, 4, p.accent[3]); // snow
-  rect(g, 0, 4, FRAME_PANEL_W, 1, p.accent[2]);
-  // Snow drips down the sides.
-  for (let i = 0; i < 6; i++) {
-    const sx = Math.floor(rng() * FRAME_PANEL_W);
-    const sh = 3 + Math.floor(rng() * 6);
-    rect(g, sx, 4, 1, sh, p.accent[3]);
-  }
+  // Bottom stone cap (8 px).
+  rect(g, 0, FRAME_PANEL_H - 8, FRAME_PANEL_W, 8, p.stone[2]);
+  rect(g, 0, FRAME_PANEL_H - 1, FRAME_PANEL_W, 1, p.stone[0]);
 
-  // Top icicles hanging from the cap.
-  for (const ix of [4, 12, 22, 28]) {
-    paintIcicle(g, ix, 12, 6 + Math.floor(rng() * 4), p);
-  }
-
-  // Bottom: stone base with pile of snow.
-  const baseY = FRAME_PANEL_H - 14;
-  rect(g, 0, baseY, FRAME_PANEL_W, 14, p.stone[2]);
-  rect(g, 0, baseY, FRAME_PANEL_W, 1, p.stone[3]);
-  rect(g, 0, FRAME_PANEL_H - 4, FRAME_PANEL_W, 4, p.accent[2]);
-  rect(g, 0, FRAME_PANEL_H - 4, FRAME_PANEL_W, 1, p.accent[3]);
-
-  // Hanging banner — drapes from a rod near the top, mid-height. Red.
+  // ONE banner draped at vertical centre.
   paintHangingBanner(g, side, p);
 
-  // Sparse snow crystals on the column.
-  g.globalAlpha = 0.7;
-  for (let i = 0; i < 18; i++) {
-    const sx = Math.floor(rng() * FRAME_PANEL_W);
-    const sy = 14 + Math.floor(rng() * (FRAME_PANEL_H - 30));
-    px(g, sx, sy, p.accent[3]);
-  }
-  g.globalAlpha = 1;
-};
-
-const paintIcicle = (
-  g: CanvasRenderingContext2D,
-  x: number,
-  topY: number,
-  h: number,
-  p: ThemePalette,
-): void => {
-  for (let i = 0; i < h; i++) {
-    const w = Math.max(1, 3 - Math.floor((i / h) * 3));
-    const ox = Math.floor((3 - w) / 2);
-    rect(g, x + ox, topY + i, w, 1, p.accent[2]);
-    if (w >= 2) px(g, x + ox, topY + i, p.accent[3]);
-  }
+  // Two horizontal courses framing the banner.
+  rect(g, 0, 60, FRAME_PANEL_W, 1, p.stone[0]);
+  rect(g, 0, 200, FRAME_PANEL_W, 1, p.stone[0]);
 };
 
 const paintHangingBanner = (
@@ -304,64 +219,35 @@ const paintTempleFrame = (
   p: ThemePalette,
   side: FrameSide,
 ): void => {
-  const rng = mulberry32(seedOf("old-temple", side));
+  void side;
 
-  // Brick course every 14 px — denser, gives the "small block" feel of
-  // the temple inspirations.
-  for (let y = 6; y < FRAME_PANEL_H; y += 14) {
-    rect(g, 1, y, FRAME_PANEL_W - 2, 1, p.stone[0]);
-    rect(g, 1, y - 1, FRAME_PANEL_W - 2, 1, p.metal[0]);
-  }
-  // Vertical mortar line straight down the middle.
-  rect(g, Math.floor(FRAME_PANEL_W / 2), 0, 1, FRAME_PANEL_H, p.stone[0]);
+  // Phase 10.5b — simplified: ONE big mascaron at vertical centre,
+  // gold trim borders, no rune row, no embers cluster, no double
+  // mascaron stack.
 
-  // Gold trim border on the outer edge — frame within frame.
-  const outer = side === "left" ? 1 : FRAME_PANEL_W - 2;
-  rect(g, outer, 4, 1, FRAME_PANEL_H - 8, p.metal[1]);
-  // Trim top / bottom caps.
-  rect(g, outer - (side === "left" ? 0 : 2), 3, 3, 1, p.metal[2]);
-  rect(g, outer - (side === "left" ? 0 : 2), FRAME_PANEL_H - 4, 3, 1, p.metal[2]);
+  // Top ornamental cap — gold scrollwork (12 px).
+  rect(g, 0, 0, FRAME_PANEL_W, 12, p.stone[0]);
+  rect(g, 2, 2, FRAME_PANEL_W - 4, 8, p.metal[1]);
+  rect(g, 2, 2, FRAME_PANEL_W - 4, 1, p.metal[2]);
+  // Cyan magic gem in the cap.
+  rect(g, 14, 4, 4, 4, p.accent[2]);
+  px(g, 15, 4, p.accent[3]);
 
-  // Top ornamental cap — gold scrollwork.
-  rect(g, 0, 0, FRAME_PANEL_W, 14, p.stone[0]);
-  rect(g, 2, 2, FRAME_PANEL_W - 4, 10, p.metal[0]);
-  rect(g, 4, 4, FRAME_PANEL_W - 8, 6, p.metal[1]);
-  rect(g, 4, 4, FRAME_PANEL_W - 8, 1, p.metal[2]);
-  // Cyan magic gem in the cap centre.
-  rect(g, 14, 5, 4, 4, p.accent[2]);
-  px(g, 15, 5, p.accent[3]);
-  px(g, 16, 8, p.accent[3]);
+  // Bottom ornamental cap — mirror.
+  const cy = FRAME_PANEL_H - 12;
+  rect(g, 0, cy, FRAME_PANEL_W, 12, p.stone[0]);
+  rect(g, 2, cy + 2, FRAME_PANEL_W - 4, 8, p.metal[1]);
+  rect(g, 2, cy + 2, FRAME_PANEL_W - 4, 1, p.metal[2]);
+  rect(g, 14, cy + 4, 4, 4, p.accent[2]);
+  px(g, 15, cy + 4, p.accent[3]);
 
-  // Bottom ornamental cap — mirror of top.
-  const cy = FRAME_PANEL_H - 14;
-  rect(g, 0, cy, FRAME_PANEL_W, 14, p.stone[0]);
-  rect(g, 2, cy + 2, FRAME_PANEL_W - 4, 10, p.metal[0]);
-  rect(g, 4, cy + 4, FRAME_PANEL_W - 8, 6, p.metal[1]);
-  rect(g, 4, cy + 4, FRAME_PANEL_W - 8, 1, p.metal[2]);
-  rect(g, 14, cy + 5, 4, 4, p.accent[2]);
-  px(g, 15, cy + 5, p.accent[3]);
-  px(g, 16, cy + 8, p.accent[3]);
+  // ONE big mayan mascaron centred — y=120 places the 30-tall face
+  // mid-frame (270/2 - 15 = 120).
+  paintTempleMascaron(g, 4, 120, p);
 
-  // Two big mayan-style mascaron faces, deterministic placements.
-  paintTempleMascaron(g, 4, 60, p);
-  paintTempleMascaron(g, 4, 174, p);
-
-  // Engraved runes scattered between the mascarons — deterministic
-  // glyphs at fixed grid positions.
-  const runeRows = [40, 52, 100, 112, 138, 150, 220, 232];
-  for (const ry of runeRows) {
-    paintTempleRune(g, 9, ry, rng() > 0.5 ? "circle" : "spiral", p);
-  }
-
-  // Faint floating orange torch glow embers.
-  g.globalAlpha = 0.4;
-  for (let i = 0; i < 14; i++) {
-    const sx = 4 + Math.floor(rng() * (FRAME_PANEL_W - 8));
-    const sy = 14 + Math.floor(rng() * (FRAME_PANEL_H - 28));
-    px(g, sx, sy, p.fire[2]);
-    if (rng() > 0.5) px(g, sx, sy - 1, p.fire[3]);
-  }
-  g.globalAlpha = 1;
+  // Two horizontal courses framing the mascaron.
+  rect(g, 0, 100, FRAME_PANEL_W, 1, p.metal[0]);
+  rect(g, 0, 160, FRAME_PANEL_W, 1, p.metal[0]);
 };
 
 const paintTempleMascaron = (
@@ -408,38 +294,7 @@ const paintTempleMascaron = (
   px(g, x + 12, y + 25, p.accent[3]);
 };
 
-const paintTempleRune = (
-  g: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  kind: "circle" | "spiral",
-  p: ThemePalette,
-): void => {
-  if (kind === "circle") {
-    // 6×6 ringed rune.
-    rect(g, x + 1, y, 4, 1, p.metal[1]);
-    rect(g, x + 1, y + 5, 4, 1, p.metal[1]);
-    rect(g, x, y + 1, 1, 4, p.metal[1]);
-    rect(g, x + 5, y + 1, 1, 4, p.metal[1]);
-    rect(g, x + 2, y + 2, 2, 2, p.metal[2]);
-    px(g, x + 2, y + 2, p.metal[3]);
-  } else {
-    // 6×6 spiral
-    rect(g, x, y + 2, 6, 1, p.metal[1]);
-    rect(g, x + 2, y, 1, 6, p.metal[1]);
-    rect(g, x + 4, y + 1, 1, 4, p.metal[1]);
-    rect(g, x + 1, y + 4, 4, 1, p.metal[2]);
-    px(g, x + 3, y + 3, p.metal[3]);
-  }
-};
-
-// FNV-ish seed combining theme and side. Keeps the two panels of a
-// theme visually distinct without producing a stark mirror.
-const seedOf = (theme: ThemeId, side: FrameSide): number => {
-  let h = 0x9e3779b1;
-  for (let i = 0; i < theme.length; i++) {
-    h = Math.imul(h ^ theme.charCodeAt(i), 0x01000193);
-  }
-  h = Math.imul(h ^ (side === "left" ? 0x4c45_4654 : 0x5249_4748), 0x01000193);
-  return (h ^ (h >>> 13)) >>> 0;
-};
+// Phase 10.5b — `paintTempleRune` and `seedOf` helpers were removed
+// alongside the rune-row/embers clutter; the simplified frames don't
+// need a per-side PRNG since they have a single deterministic focal
+// element each.
