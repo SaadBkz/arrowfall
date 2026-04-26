@@ -15,6 +15,12 @@ import { ArrowState } from "./arrow-state.js";
 // `tick` and `mapId` are emitted once per round / never (mapId is fixed
 // for the room lifetime); both are cheap to keep on the wire for debug.
 //
+// `lastInputTick` (Phase 7) — keyed by sessionId, holds the latest
+// `clientTick` the room has applied for that session. Lets each client
+// reconcile its locally predicted world: any pendingInput with a
+// clientTick ≤ lastInputTick[mySessionId] has been acked and can be
+// dropped.
+//
 // `declare` keyword (not `!`) — see archer-state.ts for the full
 // rationale. TL;DR: under `useDefineForClassFields: true` even
 // definite-assignment field declarations emit Object.defineProperty
@@ -25,6 +31,7 @@ export class MatchState extends Schema {
   declare mapId: string;
   declare archers: MapSchema<ArcherState>;
   declare arrows: ArraySchema<ArrowState>;
+  declare lastInputTick: MapSchema<number>;
 
   constructor() {
     super();
@@ -32,6 +39,7 @@ export class MatchState extends Schema {
     this.mapId = "";
     this.archers = new MapSchema<ArcherState>();
     this.arrows = new ArraySchema<ArrowState>();
+    this.lastInputTick = new MapSchema<number>();
   }
 }
 
@@ -40,4 +48,5 @@ defineTypes(MatchState, {
   mapId: "string",
   archers: { map: ArcherState },
   arrows: [ArrowState],
+  lastInputTick: { map: "uint32" },
 });

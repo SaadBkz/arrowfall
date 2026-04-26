@@ -16,10 +16,15 @@ import type { MatchState } from "./match-state.js";
 // slot ids (p1..p6). state.archers is keyed by sessionId — that lets a
 // connected client look itself up via `room.sessionId` immediately.
 // archer.id (the slot) stays in the schema for HUD color/role mapping.
+//
+// `lastClientTickBySessionId` (Phase 7) is the latest clientTick the
+// room has applied for each session. Mirrored verbatim into
+// state.lastInputTick so each client can ack its own pending inputs.
 export const worldToMatchState = (
   world: World,
   state: MatchState,
   archerIdBySessionId: ReadonlyMap<string, string>,
+  lastClientTickBySessionId: ReadonlyMap<string, number> = new Map(),
 ): void => {
   state.tick = world.tick;
   if (state.mapId !== world.map.id) {
@@ -86,5 +91,19 @@ export const worldToMatchState = (
     if (s !== undefined && !seenArrows.has(s.id)) {
       state.arrows.splice(i, 1);
     }
+  }
+
+  // lastInputTick: upsert per session, prune entries for sessions that
+  // have left. Same idempotency contract as the rest of the mirror —
+  // identical inputs produce zero patches on the second call.
+  const seenTickSessions = new Set<string>();
+  for (const [sessionId, clientTick] of lastClientTickBySessionId) {
+    if (state.lastInputTick.get(sessionId) !== clientTick) {
+      state.lastInputTick.set(sessionId, clientTick);
+    }
+    seenTickSessions.add(sessionId);
+  }
+  for (const sessionId of [...state.lastInputTick.keys()]) {
+    if (!seenTickSessions.has(sessionId)) state.lastInputTick.delete(sessionId);
   }
 };
