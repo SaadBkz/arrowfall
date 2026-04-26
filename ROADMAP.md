@@ -21,7 +21,7 @@
 
 ## Phase 7 — Client prediction + reconciliation + interpolation (terminé)
 
-✅ Livrée dans la PR `feat/prediction-reconciliation` : *(URL backfill après merge)*
+✅ Livrée dans la PR `feat/prediction-reconciliation` : <https://github.com/SaadBkz/arrowfall/pull/8>
 
 - **Wire ack** : `MatchState.lastInputTick: MapSchema<uint32>` keyé par sessionId — chaque client envoie `{...input, clientTick}` à 60 Hz, le serveur range le plus haut tick reçu via `validateClientTick` (uint32 + Number.isInteger + range check ; `validateInput` reste pure côté shape engine). `worldToMatchState` mirror la map et la prune sur leave. Le compteur clientTick est monotone et survit aux resets (c'est un horloge locale, pas du round state).
 - **PredictionEngine** ([`packages/client/src/net/prediction.ts`](packages/client/src/net/prediction.ts)) — détient `predictedWorld`, FIFO `pendingInputs` borné à 120, `localSlotId` résolu au premier `state.archers.get(sessionId)`. `stepLocal(input)` : push pending, `stepWorld(predictedWorld, {[mySlot]: input})`, ship sur le wire, décrémente le frame counter de la correction lerp. `reconcile(state, sessionId)` : drop pending acked, rebuild via `matchStateToWorld`, replay des restants ; si `|previousLocal.pos - newLocal.pos| > 4 px`, arme un offset de **correction lerp 4 frames** (linéaire, additif au rendu).
