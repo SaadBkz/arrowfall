@@ -10,7 +10,7 @@ import {
 import { createWorld, parseMap, stepWorld, type World } from "@arrowfall/engine";
 import { MatchState, worldToMatchState } from "../state/index.js";
 import arena01Json from "../maps/arena-01.json" with { type: "json" };
-import { validateInput } from "./validate-input.js";
+import { validateClientTick, validateInput } from "./validate-input.js";
 
 // Spec §0 — 2-6 players per room.
 const MAX_CLIENTS = 6;
@@ -48,6 +48,14 @@ export class ArenaRoom extends Room<MatchState> {
   // are dropped — Phase 6 uses last-write-wins, no per-tick queue.
   private readonly inputs = new Map<string, ArcherInput>();
 
+  // Phase 7 — sessionId -> latest clientTick the room has applied. We
+  // key by sessionId (not slot id) so the schema mirror writes the same
+  // shape as state.archers (keyed by sessionId), and so leaves prune
+  // cleanly. Updated in handleInput, mirrored in simulate via
+  // worldToMatchState. NOT advanced when the input is malformed — a
+  // bad payload counts as "input not received" for ack purposes.
+  private readonly lastClientTickBySession = new Map<string, number>();
+
   override onCreate(_options: unknown): void {
     this.mapData = parseMap(arena01Json as MapJson);
     if (this.mapData.spawns.length === 0) {
@@ -66,7 +74,7 @@ export class ArenaRoom extends Room<MatchState> {
     // Phase 8 (lobby + matchmaking) will revisit so mid-round joins
     // don't reset everyone.
     this.world = createWorld(this.mapData, this.spawnsPx, []);
-    worldToMatchState(this.world, this.state, this.archerIdBySession);
+    worldToMatchState(this.world, this.state, this.archerIdBySession, this.lastClientTickBySession);
 
     this.setSimulationInterval((dtMs) => this.simulate(dtMs), SIMULATION_INTERVAL_MS);
     this.setPatchRate(PATCH_INTERVAL_MS);
@@ -105,6 +113,7 @@ export class ArenaRoom extends Room<MatchState> {
     if (archerId === undefined) return;
     this.archerIdBySession.delete(client.sessionId);
     this.inputs.delete(archerId);
+    this.lastClientTickBySession.delete(client.sessionId);
 
     // Phase 6 leave semantics (per spec §8.6 with simplification): the
     // archer is removed from the World cleanly — no death animation,
@@ -122,6 +131,17 @@ export class ArenaRoom extends Room<MatchState> {
     const archerId = this.archerIdBySession.get(sessionId);
     if (archerId === undefined) return;
     this.inputs.set(archerId, validateInput(payload));
+    // clientTick is wire-only metadata, kept off the engine input. We
+    // bump only on a valid number — null payloads or malformed ticks
+    // leave the previous ack in place, which is the correct semantics
+    // (the client retransmits with monotonic ticks anyway).
+    const t = validateClientTick(payload);
+    if (t !== null) {
+      const prev = this.lastClientTickBySession.get(sessionId) ?? 0;
+      // Monotonic: ignore replays / out-of-order packets that ack
+      // older state than what we already acked.
+      if (t > prev) this.lastClientTickBySession.set(sessionId, t);
+    }
   }
 
   handleReset(sessionId: string): void {
@@ -129,6 +149,10 @@ export class ArenaRoom extends Room<MatchState> {
     console.log(`[arena] reset requested by ${sessionId}`);
     this.rebuildWorld();
     this.inputs.clear();
+    // We deliberately keep lastClientTickBySession monotonic across a
+    // reset — the client's clientTick counter is a monotonic local
+    // clock, not tied to round state. Resetting it would let an old
+    // pending input look "newer" than the post-reset acked state.
   }
 
   // Test hooks. Not used in production code.
@@ -148,10 +172,8 @@ export class ArenaRoom extends Room<MatchState> {
   }
 
   private rebuildWorld(): void {
-    this.world = createWorld(this.mapData, this.spawnsPx, [
-      ...this.archerIdBySession.values(),
-    ]);
-    worldToMatchState(this.world, this.state, this.archerIdBySession);
+    this.world = createWorld(this.mapData, this.spawnsPx, [...this.archerIdBySession.values()]);
+    worldToMatchState(this.world, this.state, this.archerIdBySession, this.lastClientTickBySession);
   }
 
   private simulate(_dtMs: number): void {
@@ -180,6 +202,6 @@ export class ArenaRoom extends Room<MatchState> {
       }
     }
 
-    worldToMatchState(this.world, this.state, this.archerIdBySession);
+    worldToMatchState(this.world, this.state, this.archerIdBySession, this.lastClientTickBySession);
   }
 }

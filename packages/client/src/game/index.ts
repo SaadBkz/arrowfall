@@ -19,7 +19,13 @@ import { HudRenderer } from "./render/hud.js";
 import { RoundMessageRenderer } from "./render/round-message.js";
 import { TilemapRenderer } from "./render/tilemap.js";
 import { getRoundOutcome } from "./round-state.js";
-import { connectToArena, matchStateToWorld, type MatchState } from "../net/index.js";
+import {
+  archerFromSnapshot,
+  connectToArena,
+  type MatchState,
+  PredictionEngine,
+  RemoteInterpolator,
+} from "../net/index.js";
 import arena01Json from "../maps/arena-01.json" with { type: "json" };
 import arena02Json from "../maps/arena-02.json" with { type: "json" };
 
@@ -91,6 +97,12 @@ export class Game {
   private netStatus: "connecting" | "online" | "error" = "connecting";
   private netError: string | null = null;
 
+  // Phase 7 — local prediction + remote interpolation. Both null in
+  // local mode; instantiated in connectAsync() right before the
+  // onStateChange handler so the first snapshot can populate them.
+  private prediction: PredictionEngine | null = null;
+  private interpolator: RemoteInterpolator | null = null;
+
   constructor(app: Application, mode: GameMode = "local") {
     this.app = app;
     this.mode = mode;
@@ -154,9 +166,7 @@ export class Game {
     // Only wire the active bindings. In networked mode that's just p1;
     // in local mode it's PLAYER_COUNT slots from PLAYER_BINDINGS.
     const activeBindings =
-      mode === "networked"
-        ? PLAYER_BINDINGS.slice(0, 1)
-        : PLAYER_BINDINGS.slice(0, PLAYER_COUNT);
+      mode === "networked" ? PLAYER_BINDINGS.slice(0, 1) : PLAYER_BINDINGS.slice(0, PLAYER_COUNT);
     this.input = new KeyboardInput(activeBindings);
 
     this.tickerCallback = (): void => this.tick();
@@ -182,11 +192,23 @@ export class Game {
       this.room = room;
       this.netStatus = "online";
       console.log(`[net] connected to arena (sessionId=${room.sessionId})`);
+
+      // Phase 7 — bring up prediction + interpolation now that we
+      // have a sessionId to identify ourselves with. Until the first
+      // onStateChange fires, both buffers stay empty and tickNetworked
+      // renders the (empty) predicted world.
+      this.prediction = new PredictionEngine(this.mapData, this.spawnPx);
+      this.interpolator = new RemoteInterpolator();
+
       room.onStateChange(() => {
-        // Just stash state; tick() will read it next frame. We don't
-        // re-render here directly — keeping rendering on the ticker
-        // avoids redundant draws when patches arrive faster than the
-        // browser repaints.
+        // Reconcile + ingest happen synchronously here. Reconcile
+        // mutates the predicted world and may arm a correction lerp;
+        // ingest pushes a snapshot into the per-session buffer.
+        // Rendering still flows from the ticker (one composed world
+        // per render frame) — patches faster than vsync don't waste
+        // draw calls.
+        this.prediction?.reconcile(room.state, room.sessionId);
+        this.interpolator?.ingest(room.state, room.sessionId);
       });
       room.onLeave(() => {
         this.netStatus = "error";
@@ -275,20 +297,32 @@ export class Game {
       this.room.send("reset");
     }
 
-    if (this.room !== null) {
-      // Send the local input EVERY render frame. Colyseus throttles the
-      // wire side; we don't coalesce on the JS side. Edge inputs (jump,
-      // dodge, shoot) are consumed locally so a single keypress only
-      // emits the edge in one outbound message.
-      const input = this.input.snapshot(this.localPlayerId);
-      this.room.send("input", input);
-      this.input.consumeEdges(this.localPlayerId);
-
-      // Mirror the latest schema state into a fresh World for rendering.
-      this.world = matchStateToWorld(this.room.state, this.mapData);
+    // Drive the predicted world at the engine's fixed 60 Hz. Each
+    // step assigns a monotonic clientTick, queues the input for
+    // future replay, and ships the input + tick to the server. The
+    // server acks via state.lastInputTick which the onStateChange
+    // handler feeds back into `prediction.reconcile()`.
+    if (this.room !== null && this.prediction !== null) {
+      const room = this.room;
+      const prediction = this.prediction;
+      const stepFn = (): void => {
+        const input = this.input.snapshot(this.localPlayerId);
+        const clientTick = prediction.stepLocal(input);
+        // Spread to a plain wire object — Colyseus serializes whatever
+        // we hand it, but mixing the engine's readonly ArcherInput with
+        // the wire-only clientTick under one type would leak network
+        // metadata into shared. The validator on the server tolerates
+        // the extra field.
+        room.send("input", { ...input, clientTick });
+        this.input.consumeEdges(this.localPlayerId);
+      };
+      this.accumulator = runFixedStep(this.app.ticker.deltaMS, this.accumulator, stepFn);
     }
 
-    // Render whatever world we have (empty until first state arrives).
+    // Compose the render world: predicted local + interpolated remotes
+    // + correction offset on the local archer.
+    this.world = this.composeRenderWorld();
+
     const archerIds = [...this.world.archers.keys()].sort();
     const badge =
       this.netStatus === "online"
@@ -300,6 +334,58 @@ export class Game {
     this.arrows.render(this.world.arrows);
     this.hud.update(this.world, this.fps, archerIds, badge);
     this.roundMessage.render(getRoundOutcome(this.world));
+  }
+
+  // Returns the world the renderer should draw this frame, layered:
+  //   1. predicted world (or empty placeholder pre-connect)
+  //   2. interpolated remote archers replace their predicted positions
+  //   3. correction lerp offset is added to the local archer's render pos
+  // Arrows stay on the predicted world — they're owned-by-engine
+  // physics; interpolating them is Phase-9 territory if needed.
+  private composeRenderWorld(): World {
+    if (this.prediction === null || this.interpolator === null || this.room === null) {
+      return this.world;
+    }
+    const predWorld = this.prediction.getPredictedWorld();
+    const archers = new Map<string, Archer>();
+    for (const [id, a] of predWorld.archers) {
+      archers.set(id, a);
+    }
+
+    // Override remote archer positions with interpolated snapshots.
+    // Cold-start sessions (< 2 snapshots) keep the predicted position
+    // — a brief stutter on first appearance is preferable to extrapolating
+    // off an empty buffer.
+    const localSlot = this.prediction.getLocalSlotId();
+    this.interpolator.forEach((sessionId, snap) => {
+      if (this.interpolator!.isColdStart(sessionId)) return;
+      const a = archerFromSnapshot(snap);
+      if (a.id === localSlot) return; // never override our own predicted pos
+      archers.set(a.id, a);
+    });
+
+    // Correction lerp on the local archer. Decays to (0,0) over
+    // CORRECTION_LERP_FRAMES — see prediction.ts.
+    if (localSlot !== null) {
+      const localA = archers.get(localSlot);
+      if (localA !== undefined) {
+        const offset = this.prediction.getRenderCorrection();
+        if (offset.x !== 0 || offset.y !== 0) {
+          archers.set(localSlot, {
+            ...localA,
+            pos: { x: localA.pos.x + offset.x, y: localA.pos.y + offset.y },
+          });
+        }
+      }
+    }
+
+    return {
+      map: predWorld.map,
+      archers,
+      arrows: predWorld.arrows,
+      tick: predWorld.tick,
+      events: predWorld.events,
+    };
   }
 
   // Exposed for tests / debugging — read-only reflection of the

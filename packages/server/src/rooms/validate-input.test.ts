@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NEUTRAL_INPUT, type ArcherInput } from "@arrowfall/shared";
-import { validateInput } from "./validate-input.js";
+import { validateClientTick, validateInput } from "./validate-input.js";
 
 const VALID: ArcherInput = {
   left: false,
@@ -55,5 +55,37 @@ describe("validateInput", () => {
 
   it("ignores extra fields without rejecting (forward-compat)", () => {
     expect(validateInput({ ...VALID, futureField: "ignored" })).toEqual(VALID);
+  });
+
+  it("ignores the wire-only clientTick field on its return value", () => {
+    expect(validateInput({ ...VALID, clientTick: 17 })).toEqual(VALID);
+  });
+});
+
+describe("validateClientTick", () => {
+  it("returns the clientTick value when present and a valid uint32", () => {
+    expect(validateClientTick({ clientTick: 0 })).toBe(0);
+    expect(validateClientTick({ clientTick: 1 })).toBe(1);
+    expect(validateClientTick({ clientTick: 0xff_ff_ff_ff })).toBe(0xff_ff_ff_ff);
+  });
+
+  it("returns null when clientTick is missing", () => {
+    expect(validateClientTick({})).toBeNull();
+    expect(validateClientTick({ left: false })).toBeNull();
+  });
+
+  it("returns null for malformed payloads", () => {
+    expect(validateClientTick(null)).toBeNull();
+    expect(validateClientTick("hello")).toBeNull();
+    expect(validateClientTick(42)).toBeNull();
+  });
+
+  it("rejects non-integer or out-of-range clientTicks", () => {
+    expect(validateClientTick({ clientTick: -1 })).toBeNull();
+    expect(validateClientTick({ clientTick: 1.5 })).toBeNull();
+    expect(validateClientTick({ clientTick: Number.NaN })).toBeNull();
+    expect(validateClientTick({ clientTick: Number.POSITIVE_INFINITY })).toBeNull();
+    expect(validateClientTick({ clientTick: 0x1_00_00_00_00 })).toBeNull();
+    expect(validateClientTick({ clientTick: "5" })).toBeNull();
   });
 });

@@ -109,6 +109,37 @@ describe("worldToMatchState", () => {
     expect(state.archers.has("sB")).toBe(false);
   });
 
+  it("mirrors lastInputTick per session and removes entries when sessions leave", () => {
+    const world = buildWorld(["p1", "p2"]);
+    const state = new MatchState();
+    const sessions = sessionMap([
+      ["sA", "p1"],
+      ["sB", "p2"],
+    ]);
+    const ticks = new Map<string, number>([
+      ["sA", 42],
+      ["sB", 17],
+    ]);
+
+    worldToMatchState(world, state, sessions, ticks);
+    expect(state.lastInputTick.get("sA")).toBe(42);
+    expect(state.lastInputTick.get("sB")).toBe(17);
+
+    // sB leaves; the mirror should drop its entry.
+    worldToMatchState(world, state, sessions, new Map([["sA", 43]]));
+    expect(state.lastInputTick.get("sA")).toBe(43);
+    expect(state.lastInputTick.has("sB")).toBe(false);
+  });
+
+  it("defaults lastInputTick to an empty mirror when not provided (legacy callers)", () => {
+    // Older callers pass 3 args; the 4th param defaults to an empty
+    // Map, so the lastInputTick MapSchema stays untouched (empty).
+    const world = buildWorld(["p1"]);
+    const state = new MatchState();
+    worldToMatchState(world, state, sessionMap([["sA", "p1"]]));
+    expect(state.lastInputTick.size).toBe(0);
+  });
+
   it("upserts arrows by id and removes those that disappear", () => {
     let world = buildWorld(["p1"]);
     const map = sessionMap([["sA", "p1"]]);

@@ -103,6 +103,7 @@ export class MatchState extends Schema {
   declare mapId: string;
   declare archers: MapSchema<ArcherState>;
   declare arrows: ArraySchema<ArrowState>;
+  declare lastInputTick: MapSchema<number>;
 
   constructor() {
     super();
@@ -110,6 +111,7 @@ export class MatchState extends Schema {
     this.mapId = "";
     this.archers = new MapSchema<ArcherState>();
     this.arrows = new ArraySchema<ArrowState>();
+    this.lastInputTick = new MapSchema<number>();
   }
 }
 
@@ -118,4 +120,5 @@ defineTypes(MatchState, {
   mapId: "string",
   archers: { map: ArcherState },
   arrows: [ArrowState],
+  lastInputTick: { map: "uint32" },
 });
