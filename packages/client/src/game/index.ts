@@ -264,6 +264,13 @@ export class Game {
     // local mode (the server picks the map in networked mode). Listener
     // sits outside KeyboardInput so it doesn't perturb the per-player
     // bindings or trigger preventDefault.
+    //
+    // Layout note: matches `event.key` (the printed character) rather
+    // than `event.code` (the physical key). The per-player bindings
+    // intentionally use `event.code` so ZQSD on AZERTY = WASD on
+    // QWERTY (same physical positions); the M-cycler is different
+    // because the user looks for the *visible* "M" on their keyboard,
+    // which sits at different physical positions on AZERTY vs QWERTY.
     if (this.mode === "local") {
       this.cycleMapHandler = (e: KeyboardEvent): void => {
         // Match the printed letter (event.key) instead of the physical
