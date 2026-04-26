@@ -31,6 +31,14 @@ import {
   type DecorationSpriteKey,
 } from "./decoration-painter.js";
 import {
+  buildFogSprites,
+  type FogSpriteKey,
+} from "./fog-painter.js";
+import {
+  buildFrameSprites,
+  type FrameSpriteKey,
+} from "./frame-painter.js";
+import {
   buildShieldSprites,
   type ShieldSpriteKey,
 } from "./shield-painter.js";
@@ -38,6 +46,7 @@ import {
   buildTileSprites,
   type TileSpriteKey,
 } from "./tile-painter.js";
+import { buildVignette } from "./vignette-painter.js";
 import { ALL_ARCHER_SKINS, type ArcherSkinId } from "./palettes.js";
 
 export type AssetRegistry = {
@@ -54,6 +63,12 @@ export type AssetRegistry = {
     ThemeId,
     ReadonlyMap<DecorationSpriteKey, Texture>
   >;
+  // Phase 10.5.a — frame panels (32×270 left/right per theme), fog
+  // overlay (256×270 tileable per theme), and a single vignette texture
+  // (480×270 RGBA radial alpha).
+  readonly frames: ReadonlyMap<ThemeId, ReadonlyMap<FrameSpriteKey, Texture>>;
+  readonly fog: ReadonlyMap<FogSpriteKey, Texture>;
+  readonly vignette: Texture;
 };
 
 const toTextureMap = <K>(
@@ -71,11 +86,17 @@ export const buildAllAssets = (): AssetRegistry => {
   const tiles = new Map<ThemeId, Map<TileSpriteKey, Texture>>();
   const backgrounds = new Map<BackgroundSpriteKey, Texture>();
   const decorations = new Map<ThemeId, Map<DecorationSpriteKey, Texture>>();
+  const frames = new Map<ThemeId, Map<FrameSpriteKey, Texture>>();
+  const fog = new Map<FogSpriteKey, Texture>();
   for (const theme of ALL_THEMES) {
     tiles.set(theme, toTextureMap(buildTileSprites(theme)));
     decorations.set(theme, toTextureMap(buildDecorationSprites(theme)));
+    frames.set(theme, toTextureMap(buildFrameSprites(theme)));
     for (const [k, v] of toTextureMap(buildBackgroundSprites(theme))) {
       backgrounds.set(k, v);
+    }
+    for (const [k, v] of toTextureMap(buildFogSprites(theme))) {
+      fog.set(k, v);
     }
   }
 
@@ -87,8 +108,20 @@ export const buildAllAssets = (): AssetRegistry => {
   const arrows = toTextureMap(buildArrowSprites());
   const chests = toTextureMap(buildChestSprites());
   const shields = toTextureMap(buildShieldSprites());
+  const vignette = Texture.from(buildVignette());
 
-  return { tiles, archers, arrows, chests, shields, backgrounds, decorations };
+  return {
+    tiles,
+    archers,
+    arrows,
+    chests,
+    shields,
+    backgrounds,
+    decorations,
+    frames,
+    fog,
+    vignette,
+  };
 };
 
 // Re-exports so renderers can import painter constants and types
@@ -137,3 +170,20 @@ export { PALETTES } from "./palettes.js";
 export type { DecorationKind, DecorationSpriteKey } from "./decoration-painter.js";
 export { spawnDecorations } from "./decoration-spawner.js";
 export type { Decoration } from "./decoration-spawner.js";
+export {
+  FRAME_PANEL_W,
+  FRAME_PANEL_H,
+} from "./frame-painter.js";
+export type { FrameSide, FrameSpriteKey } from "./frame-painter.js";
+export {
+  VIGNETTE_W,
+  VIGNETTE_H,
+  VIGNETTE_MAX_ALPHA,
+  vignetteAlphaAt,
+} from "./vignette-painter.js";
+export {
+  FOG_W,
+  FOG_H,
+  fogValueAt,
+} from "./fog-painter.js";
+export type { FogSpriteKey } from "./fog-painter.js";
