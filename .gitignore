@@ -8,3 +8,7 @@ dist
 coverage
 *.log
 prompt-claude-code-*.md
+
+# Phase 10 — moodboard work directory holds copyrighted TowerFall
+# screenshots used as art-direction references. Do NOT redistribute.
+inspirations/

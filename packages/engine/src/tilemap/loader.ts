@@ -1,6 +1,8 @@
 import {
+  ALL_THEMES,
   ARENA_HEIGHT_TILES,
   ARENA_WIDTH_TILES,
+  DEFAULT_THEME,
   TILE_CHAR_TO_KIND,
   TILE_KIND_TO_CHAR,
   type MapData,
@@ -58,6 +60,16 @@ export const parseMap = (json: MapJson): MapData => {
     tiles.push(tilesRow);
   }
 
+  // Phase 10 — theme defaults to DEFAULT_THEME for back-compat with
+  // arena-01/02 fixtures that pre-date the field. Validate against
+  // ALL_THEMES so a typo in a hand-edited JSON fails fast.
+  const theme = json.theme ?? DEFAULT_THEME;
+  if (!ALL_THEMES.includes(theme)) {
+    throw new MapParseError(
+      `theme "${theme}": expected one of ${ALL_THEMES.join(", ")}`,
+    );
+  }
+
   return {
     id: json.id,
     name: json.name,
@@ -66,6 +78,7 @@ export const parseMap = (json: MapJson): MapData => {
     tiles,
     spawns,
     chestSpawns,
+    theme,
   };
 };
 
@@ -86,11 +99,16 @@ export const serializeMap = (map: MapData): MapJson => {
     }
     rows.push(s);
   }
-  return {
+  // Only emit `theme` if it diverges from the default — keeps the
+  // existing arena-01/02 round-trip identical to their pre-Phase-10
+  // shape on disk.
+  const out: MapJson = {
     id: map.id,
     name: map.name,
     width: map.width,
     height: map.height,
     rows,
+    ...(map.theme !== DEFAULT_THEME ? { theme: map.theme } : {}),
   };
+  return out;
 };
