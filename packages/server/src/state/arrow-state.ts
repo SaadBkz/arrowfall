@@ -4,6 +4,11 @@ import { Schema, defineTypes } from "@colyseus/schema";
 // `age` is omitted — the client doesn't need it for rendering, only the
 // status (flying/grounded/embedded) drives the visual.
 //
+// Phase 9a — `arrowType` field exposes the engine's ArrowType to the
+// client renderer ("normal" | "bomb"). Status "exploding" is harvested
+// by stepWorld within a single tick and never appears on the wire, so
+// the client only ever sees the normal three statuses.
+//
 // `declare` (not `!`) — see archer-state.ts for the full rationale.
 export class ArrowState extends Schema {
   declare id: string;
@@ -14,6 +19,7 @@ export class ArrowState extends Schema {
   declare ownerId: string;
   declare status: string; // "flying" | "grounded" | "embedded"
   declare groundedTimer: number;
+  declare arrowType: string; // Phase 9a — "normal" | "bomb"
 
   constructor() {
     super();
@@ -25,6 +31,7 @@ export class ArrowState extends Schema {
     this.ownerId = "";
     this.status = "flying";
     this.groundedTimer = 0;
+    this.arrowType = "normal";
   }
 }
 
@@ -37,4 +44,5 @@ defineTypes(ArrowState, {
   ownerId: "string",
   status: "string",
   groundedTimer: "uint16",
+  arrowType: "string",
 });

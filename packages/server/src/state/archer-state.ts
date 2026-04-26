@@ -35,6 +35,10 @@ export class ArcherState extends Schema {
   declare deathTimer: number;
   declare spawnIframeTimer: number;
   declare dodgeIframeTimer: number;
+  // Phase 9a — special-arrow inventory (count of bomb arrows held).
+  // Phase 9b will add drillInventory / laserInventory / hasShield in
+  // the same flat shape.
+  declare bombInventory: number;
 
   constructor() {
     super();
@@ -50,6 +54,7 @@ export class ArcherState extends Schema {
     this.deathTimer = 0;
     this.spawnIframeTimer = 0;
     this.dodgeIframeTimer = 0;
+    this.bombInventory = 0;
   }
 }
 
@@ -66,4 +71,5 @@ defineTypes(ArcherState, {
   deathTimer: "uint16",
   spawnIframeTimer: "uint16",
   dodgeIframeTimer: "uint16",
+  bombInventory: "uint8",
 });

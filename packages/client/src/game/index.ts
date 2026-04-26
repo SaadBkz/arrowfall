@@ -22,6 +22,7 @@ import { KeyboardInput, PLAYER_BINDINGS } from "./input.js";
 import { runFixedStep } from "./loop.js";
 import { ArchersRenderer } from "./render/archer.js";
 import { ArrowsRenderer } from "./render/arrow.js";
+import { ChestsRenderer } from "./render/chest.js";
 import { HudRenderer } from "./render/hud.js";
 import { RoundMessageRenderer } from "./render/round-message.js";
 import { TilemapRenderer } from "./render/tilemap.js";
@@ -78,6 +79,7 @@ export class Game {
   private readonly tilemap: TilemapRenderer;
   private readonly archers: ArchersRenderer;
   private readonly arrows: ArrowsRenderer;
+  private readonly chests: ChestsRenderer;
   private readonly hud: HudRenderer;
   private readonly roundMessage: RoundMessageRenderer;
   private readonly input: KeyboardInput;
@@ -156,6 +158,11 @@ export class Game {
 
     this.arrows = new ArrowsRenderer();
     this.gameRoot.addChild(this.arrows.view);
+
+    // Chests sit between arrows and archers so an archer standing on
+    // top of a chest is drawn over the chest (not the other way around).
+    this.chests = new ChestsRenderer();
+    this.gameRoot.addChild(this.chests.view);
 
     this.archers = new ArchersRenderer();
     this.gameRoot.addChild(this.archers.view);
@@ -266,6 +273,7 @@ export class Game {
     this.tilemap.dispose();
     this.archers.dispose();
     this.arrows.dispose();
+    this.chests.dispose();
     this.hud.dispose();
     this.roundMessage.dispose();
   }
@@ -317,6 +325,7 @@ export class Game {
 
     this.archers.render(sortedArchers(this.world));
     this.arrows.render(this.world.arrows);
+    this.chests.render(this.world.chests);
     this.hud.update(
       this.world,
       this.fps,
@@ -378,6 +387,7 @@ export class Game {
           : `error: ${this.netError ?? "unknown"}`;
     this.archers.render(sortedArchers(this.world));
     this.arrows.render(this.world.arrows);
+    this.chests.render(this.world.chests);
     this.hud.update(this.world, this.fps, archerIds, badge);
     // Round-end overlay is driven by server phase rather than local
     // alive-count: the freeze starts when the server says so, and we
@@ -466,6 +476,7 @@ export class Game {
       map: predWorld.map,
       archers,
       arrows: predWorld.arrows,
+      chests: predWorld.chests,
       tick: predWorld.tick,
       events: predWorld.events,
     };

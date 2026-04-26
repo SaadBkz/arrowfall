@@ -23,6 +23,15 @@ export const ARCHER_BODY_COLORS: ReadonlyArray<number> = [
 
 export const ARROW_FLYING_COLOR = 0xffffff;
 export const ARROW_GROUNDED_COLOR = 0x888888;
+// Phase 9a — bomb arrow palette. Bright red while flying so the
+// projectile reads as dangerous, darker grey-red once grounded
+// (rare path — bombs usually explode rather than ground).
+export const BOMB_FLYING_COLOR = 0xff4040;
+export const BOMB_GROUNDED_COLOR = 0xb04040;
+// Chest colors — closed = warm gold, opening = brighter flash.
+export const CHEST_CLOSED_COLOR = 0xd4a64a;
+export const CHEST_OPENING_COLOR = 0xfde08a;
+export const CHEST_OUTLINE_COLOR = 0x6a4a1a;
 
 export const HUD_TEXT_COLOR = 0xffffff;
 

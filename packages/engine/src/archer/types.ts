@@ -24,12 +24,18 @@ export type Archer = {
   // collide.ts. Reset every step from pos.y + HITBOX_H.
   readonly prevBottom: number;
   // Phase 3 — combat / lifecycle.
-  readonly inventory: number; // arrows held (0..MAX_INVENTORY); spawn = SPAWN_ARROW_COUNT
+  readonly inventory: number; // normal arrows (0..MAX_INVENTORY); spawn = SPAWN_ARROW_COUNT
   readonly shootCooldownTimer: number; // > 0 blocks new shots
   readonly alive: boolean; // false after a lethal hit
   readonly deathTimer: number; // frames since death; client uses this for the
   // fragmentation animation, world uses it to despawn after DEATH_DURATION_FRAMES
   readonly spawnIframeTimer: number; // > 0 → arrows pass through, stomp ignored
+  // Phase 9a — special-arrow inventory. Bombs share the same MAX_INVENTORY
+  // cap as normal arrows but are tracked in a separate counter so the wire
+  // schema stays a flat (uint8, uint8) instead of a typed stack. Phase 9b
+  // adds drillInventory / laserInventory / hasShield in the same shape; if
+  // we hit ~5 of these we'll refactor to a single typed array.
+  readonly bombInventory: number;
 };
 
 export const createArcher = (
@@ -53,6 +59,7 @@ export const createArcher = (
   alive: true,
   deathTimer: 0,
   spawnIframeTimer: SPAWN_IFRAME_FRAMES,
+  bombInventory: 0,
 });
 
 // Re-exported so callers can build their own AABB from an Archer without

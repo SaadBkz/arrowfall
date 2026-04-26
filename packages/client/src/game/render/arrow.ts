@@ -1,10 +1,17 @@
 import { type Arrow, ARROW_H, ARROW_W } from "@arrowfall/engine";
 import { Container, Graphics } from "pixi.js";
-import { ARROW_FLYING_COLOR, ARROW_GROUNDED_COLOR } from "../colors.js";
+import {
+  ARROW_FLYING_COLOR,
+  ARROW_GROUNDED_COLOR,
+  BOMB_FLYING_COLOR,
+  BOMB_GROUNDED_COLOR,
+} from "../colors.js";
 
 // Stateless renderer: clear + redraw every frame. Flying arrows are
 // rotated to match their velocity vector; grounded/embedded ones render
-// flat (we don't track their landing angle — keeps Phase 4 zero-state).
+// flat (we don't track their landing angle — keeps the renderer
+// zero-state). Phase 9a: bombs use a red palette so a quick glance
+// distinguishes them from white normal arrows mid-flight.
 export class ArrowsRenderer {
   readonly view: Container;
   private readonly graphics: Graphics;
@@ -20,9 +27,21 @@ export class ArrowsRenderer {
     g.clear();
 
     for (const arrow of arrows) {
-      const color = arrow.status === "flying" ? ARROW_FLYING_COLOR : ARROW_GROUNDED_COLOR;
+      // Status "exploding" lives for at most one engine tick before
+      // stepWorld removes the arrow; we still draw it (flat at the
+      // resolved position) so the renderer doesn't briefly miss a
+      // frame between the impact and the explosion FX.
+      const flying = arrow.status === "flying";
+      const isBomb = arrow.type === "bomb";
+      const color = flying
+        ? isBomb
+          ? BOMB_FLYING_COLOR
+          : ARROW_FLYING_COLOR
+        : isBomb
+          ? BOMB_GROUNDED_COLOR
+          : ARROW_GROUNDED_COLOR;
 
-      if (arrow.status === "flying") {
+      if (flying) {
         // Rotate the 8×2 rect around its centre so it tracks velocity.
         // PixiJS Graphics doesn't support per-shape transforms, so we
         // compute the four rotated corners manually and draw a poly.

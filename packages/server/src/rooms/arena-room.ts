@@ -8,6 +8,7 @@ import {
   type Vec2,
 } from "@arrowfall/shared";
 import {
+  type Chest,
   createWorld,
   getRoundOutcome,
   parseMap,
@@ -24,6 +25,7 @@ import {
   releaseRoomCode,
   reserveRoomCode,
 } from "./room-codes.js";
+import { ChestSpawner, chestSpawnsToPx } from "./chest-spawner.js";
 
 // Spec §0 — 2-6 players per room.
 const MAX_CLIENTS = 6;
@@ -93,6 +95,13 @@ export class ArenaRoom extends Room<MatchState> {
   // Owned room code — released in onDispose so the registry doesn't leak.
   private ownedCode: string | null = null;
 
+  // Phase 9a — chest spawner. Lives outside the engine (uses Math.random
+  // for cadence + loot, not deterministic across rooms). Reset at the
+  // start of each round so the spawn schedule restarts from tick 0 of
+  // the new round.
+  private chestSpawner!: ChestSpawner;
+  private nextChestIdCounter = 0;
+
   override onCreate(options: ArenaRoomOptions = {}): void {
     this.mapData = parseMap(arena01Json as MapJson);
     if (this.mapData.spawns.length === 0) {
@@ -119,6 +128,10 @@ export class ArenaRoom extends Room<MatchState> {
     // Empty world initially. Players will be spawned at start-match
     // time (or on join while still in lobby).
     this.world = createWorld(this.mapData, this.spawnsPx, []);
+    this.chestSpawner = new ChestSpawner({
+      chestSpawnsTilesPx: chestSpawnsToPx(this.mapData.chestSpawns),
+      nextChestId: () => `chest-${this.nextChestIdCounter++}`,
+    });
     worldToMatchState(
       this.world,
       this.state,
@@ -330,6 +343,13 @@ export class ArenaRoom extends Room<MatchState> {
     );
   }
 
+  private injectChest(chest: Chest): void {
+    // World.chests is ReadonlyArray; rebuild and swap (same pattern as
+    // forfeitArcher). Cheap — at most CHEST_MAX_SIMULTANEOUS entries.
+    const chests = [...this.world.chests, chest];
+    this.world = { ...this.world, chests };
+  }
+
   private forfeitArcher(archerId: string): void {
     const archer = this.world.archers.get(archerId);
     if (archer === undefined) return;
@@ -368,6 +388,7 @@ export class ArenaRoom extends Room<MatchState> {
     this.state.phaseTimer = 0;
     this.state.phase = "playing";
     this.rebuildWorld();
+    this.chestSpawner.reset(this.world.tick);
     console.log(`[arena] match started (players=${this.archerIdBySession.size})`);
   }
 
@@ -378,6 +399,7 @@ export class ArenaRoom extends Room<MatchState> {
     this.state.phase = "playing";
     this.inputs.clear();
     this.rebuildWorld();
+    this.chestSpawner.reset(this.world.tick);
   }
 
   private endRound(winnerSessionId: string | null): void {
@@ -459,6 +481,16 @@ export class ArenaRoom extends Room<MatchState> {
     } catch (err) {
       console.error("[arena] simulate error:", err);
       return;
+    }
+
+    // Phase 9a — chest spawn cadence. Only roll while the round is
+    // actually in progress; round-end keeps the chests on the map but
+    // doesn't add new ones (they'd be wasted).
+    if (this.state.phase === "playing") {
+      const newChest = this.chestSpawner.maybeSpawn(this.world.tick, this.world.chests);
+      if (newChest !== null) {
+        this.injectChest(newChest);
+      }
     }
 
     // Clear edge inputs after the step. Levels persist until the

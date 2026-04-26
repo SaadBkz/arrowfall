@@ -33,6 +33,7 @@ export const createWorld = (
     map,
     archers,
     arrows: [],
+    chests: [],
     tick: 0,
     events: [],
   };
