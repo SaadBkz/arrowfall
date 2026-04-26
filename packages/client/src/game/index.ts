@@ -15,13 +15,13 @@ import {
   TILE_SIZE,
   type Vec2,
 } from "@arrowfall/shared";
-import { type Application, Container, Graphics } from "pixi.js";
+import { type Application, Container } from "pixi.js";
 import type { Room } from "colyseus.js";
-import { BG_COLOR } from "./colors.js";
 import { KeyboardInput, PLAYER_BINDINGS } from "./input.js";
 import { runFixedStep } from "./loop.js";
 import { ArchersRenderer } from "./render/archer.js";
 import { ArrowsRenderer } from "./render/arrow.js";
+import { BackgroundRenderer } from "./render/background.js";
 import { ChestsRenderer } from "./render/chest.js";
 import { HudRenderer } from "./render/hud.js";
 import { RoundMessageRenderer } from "./render/round-message.js";
@@ -32,8 +32,12 @@ import {
   PredictionEngine,
   RemoteInterpolator,
 } from "../net/index.js";
+import type { AssetRegistry } from "../assets/index.js";
 import arena01Json from "../maps/arena-01.json" with { type: "json" };
 import arena02Json from "../maps/arena-02.json" with { type: "json" };
+import sacredGroveJson from "../maps/sacred-grove.json" with { type: "json" };
+import twinSpiresJson from "../maps/twin-spires.json" with { type: "json" };
+import oldTempleJson from "../maps/old-temple.json" with { type: "json" };
 
 // Phase 5 — hot-seat. Bump up to 4 to test 4-player on arena-02.
 // Anything above 4 will reuse PLAYER_BINDINGS modulo length so it won't
@@ -49,6 +53,15 @@ export type GameMode = "local" | "networked";
 // counts don't match, so a 4-spawn map on a 2P round is harmless.
 const MAP_FOR_2P = arena01Json as MapJson;
 const MAP_FOR_4P = arena02Json as MapJson;
+
+// Phase 10 — themed maps. Cycled in local mode via the M key. Each
+// has its own theme + spawn layout. Chosen so the visual variety is
+// immediately apparent (forest / spires / temple).
+const THEMED_MAPS: ReadonlyArray<MapJson> = [
+  sacredGroveJson as MapJson,
+  twinSpiresJson as MapJson,
+  oldTempleJson as MapJson,
+];
 
 const playerIds = (count: number): ReadonlyArray<string> => {
   // Pick the first `count` ids from PLAYER_BINDINGS so the keyboard is
@@ -75,14 +88,19 @@ export class Game {
   private readonly mode: GameMode;
   private readonly app: Application;
   private readonly gameRoot: Container;
-  private readonly bgGraphics: Graphics;
-  private readonly tilemap: TilemapRenderer;
+  private readonly background: BackgroundRenderer;
+  private tilemap: TilemapRenderer;
   private readonly archers: ArchersRenderer;
   private readonly arrows: ArrowsRenderer;
   private readonly chests: ChestsRenderer;
   private readonly hud: HudRenderer;
   private readonly roundMessage: RoundMessageRenderer;
   private readonly input: KeyboardInput;
+  private readonly assets: AssetRegistry | null;
+  // Phase 10 — local-mode map cycler. Index into THEMED_MAPS, advanced
+  // by the M key. Networked mode ignores this (the server picks the map).
+  private themedMapIndex = 0;
+  private cycleMapHandler: ((e: KeyboardEvent) => void) | null = null;
 
   // For local mode: fixed list of slot ids p1..pN.
   // For networked mode: the local archer's binding id ("p1") only.
@@ -90,11 +108,14 @@ export class Game {
   // world (so all online archers appear, sorted by slot id).
   private readonly localPlayerId: string;
   private readonly localBindings: ReadonlyArray<string>;
-  private readonly mapData: MapData;
+  // Phase 10 — `mapData` and `spawnPx` are reassigned by cycleThemedMap
+  // in local mode (M-key cycles through THEMED_MAPS). Networked mode
+  // never reassigns them — the server picks the map.
+  private mapData: MapData;
   private world: World;
   private accumulator = 0;
   private fps = 60;
-  private readonly spawnPx: ReadonlyArray<Vec2>;
+  private spawnPx: ReadonlyArray<Vec2>;
   private readonly tickerCallback: () => void;
   private readonly resizeListener: () => void;
 
@@ -117,9 +138,15 @@ export class Game {
   private phaseListeners: Array<(phase: string) => void> = [];
   private lastSeenPhase: string = "lobby";
 
-  constructor(app: Application, mode: GameMode = "local", room: Room<MatchState> | null = null) {
+  constructor(
+    app: Application,
+    mode: GameMode = "local",
+    room: Room<MatchState> | null = null,
+    assets: AssetRegistry | null = null,
+  ) {
     this.app = app;
     this.mode = mode;
+    this.assets = assets;
 
     if (mode === "networked") {
       // Networked uses p1 binding (arrows / Space / J / K) — most
@@ -133,7 +160,16 @@ export class Game {
       this.localBindings = playerIds(PLAYER_COUNT);
     }
 
-    const mapJson = mode === "networked" ? MAP_FOR_2P : PLAYER_COUNT >= 3 ? MAP_FOR_4P : MAP_FOR_2P;
+    // Local mode now starts on the first themed map (sacred-grove).
+    // Networked mode keeps using the legacy arena-01/02 layout — the
+    // server doesn't know about themed maps yet (Phase 11 wiring will
+    // surface the map picker through the lobby).
+    const mapJson =
+      mode === "networked"
+        ? MAP_FOR_2P
+        : PLAYER_COUNT >= 3
+          ? MAP_FOR_4P
+          : THEMED_MAPS[this.themedMapIndex]!;
     this.mapData = parseMap(mapJson);
     if (this.mapData.spawns.length === 0) {
       throw new Error(`${this.mapData.id}: no SPAWN tile`);
@@ -149,23 +185,29 @@ export class Game {
     this.gameRoot = new Container();
     this.app.stage.addChild(this.gameRoot);
 
-    this.bgGraphics = new Graphics();
-    this.bgGraphics.rect(0, 0, ARENA_WIDTH_PX, ARENA_HEIGHT_PX).fill(BG_COLOR);
-    this.gameRoot.addChild(this.bgGraphics);
+    // Background sits at the very bottom of the stage tree. In sprite
+    // mode it draws back+mid parallax layers; in fallback it's just a
+    // solid BG_COLOR rect — same z-order as the Phase 4 bgGraphics.
+    this.background = new BackgroundRenderer(this.assets);
+    this.background.setTheme(this.mapData.theme);
+    this.gameRoot.addChild(this.background.view);
 
-    this.tilemap = new TilemapRenderer(this.mapData);
+    this.tilemap = new TilemapRenderer(this.mapData, this.assets);
     this.gameRoot.addChild(this.tilemap.view);
 
-    this.arrows = new ArrowsRenderer();
+    this.arrows = new ArrowsRenderer(this.assets);
     this.gameRoot.addChild(this.arrows.view);
 
     // Chests sit between arrows and archers so an archer standing on
     // top of a chest is drawn over the chest (not the other way around).
-    this.chests = new ChestsRenderer();
+    this.chests = new ChestsRenderer(this.assets);
     this.gameRoot.addChild(this.chests.view);
 
-    this.archers = new ArchersRenderer();
+    this.archers = new ArchersRenderer(this.assets);
     this.gameRoot.addChild(this.archers.view);
+
+    void ARENA_WIDTH_PX;
+    void ARENA_HEIGHT_PX;
 
     this.hud = new HudRenderer();
     this.gameRoot.addChild(this.hud.view);
@@ -203,6 +245,47 @@ export class Game {
     this.applyScale();
     window.addEventListener("resize", this.resizeListener);
     this.app.ticker.add(this.tickerCallback);
+
+    // Phase 10 — M cycles the local themed map. Only effective in
+    // local mode (the server picks the map in networked mode). Listener
+    // sits outside KeyboardInput so it doesn't perturb the per-player
+    // bindings or trigger preventDefault.
+    if (this.mode === "local") {
+      this.cycleMapHandler = (e: KeyboardEvent): void => {
+        if (e.code === "KeyM" && !e.repeat) {
+          this.cycleThemedMap();
+        }
+      };
+      window.addEventListener("keydown", this.cycleMapHandler);
+    }
+  }
+
+  // Cycle to the next themed map: rebuild tilemap renderer + world,
+  // reset background theme. The cycler is a no-op in 4P mode (we
+  // already use arena-02 there for the spawn count). Called by the
+  // M-key listener.
+  private cycleThemedMap(): void {
+    if (PLAYER_COUNT >= 3) return; // 4P stays on arena-02
+    this.themedMapIndex = (this.themedMapIndex + 1) % THEMED_MAPS.length;
+    const next = parseMap(THEMED_MAPS[this.themedMapIndex]!);
+    // Replace map data + spawn cache. This is a "live" reset — the
+    // current archers and arrows are blown away by createWorld below.
+    this.mapData = next;
+    this.spawnPx = next.spawns.map((s) => ({
+      x: s.x * TILE_SIZE,
+      y: s.y * TILE_SIZE,
+    }));
+
+    // Tear down old tilemap, build a new one for the new theme.
+    this.gameRoot.removeChild(this.tilemap.view);
+    this.tilemap.dispose();
+    this.tilemap = new TilemapRenderer(next, this.assets);
+    // Re-insert at the right z-position (just above the background).
+    this.gameRoot.addChildAt(this.tilemap.view, 1);
+
+    this.background.setTheme(next.theme);
+    this.resetWorldLocal();
+    console.log(`[arrowfall] map → ${next.id} (${next.theme})`);
   }
 
   // Plug in a Colyseus room obtained externally (Phase 8 menu flow).
@@ -269,11 +352,16 @@ export class Game {
   dispose(): void {
     this.app.ticker.remove(this.tickerCallback);
     window.removeEventListener("resize", this.resizeListener);
+    if (this.cycleMapHandler !== null) {
+      window.removeEventListener("keydown", this.cycleMapHandler);
+      this.cycleMapHandler = null;
+    }
     this.input.dispose();
     this.tilemap.dispose();
     this.archers.dispose();
     this.arrows.dispose();
     this.chests.dispose();
+    this.background.dispose();
     this.hud.dispose();
     this.roundMessage.dispose();
   }
@@ -323,6 +411,7 @@ export class Game {
 
     this.accumulator = runFixedStep(this.app.ticker.deltaMS, this.accumulator, stepFn);
 
+    this.background.update(this.world.tick);
     this.archers.render(sortedArchers(this.world));
     this.arrows.render(this.world.arrows);
     this.chests.render(this.world.chests);
@@ -330,7 +419,7 @@ export class Game {
       this.world,
       this.fps,
       this.localBindings,
-      `local — ${this.localBindings.length} players`,
+      `local — ${this.localBindings.length} players · [M] map`,
     );
     this.roundMessage.render(getRoundOutcome(this.world));
   }
@@ -385,6 +474,7 @@ export class Game {
         : this.netStatus === "connecting"
           ? "connecting…"
           : `error: ${this.netError ?? "unknown"}`;
+    this.background.update(this.world.tick);
     this.archers.render(sortedArchers(this.world));
     this.arrows.render(this.world.arrows);
     this.chests.render(this.world.chests);

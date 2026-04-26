@@ -17,8 +17,58 @@
 | **8** | Lobby, code de room 4 lettres, écran fin de round/match | match complet 2 joueurs distants | ✅ |
 | **9a** | Coffres + flèche Bomb (loot + explosion) | match avec coffres et explosions | ✅ |
 | **9b** | Flèches Drill + Laser + Shield (mécaniques restantes) | mécaniques complètes | ✅ |
-| **10** | 3 maps designées + intégration assets pixel art CC0 | jeu visuel complet | ⏳ |
+| **10** | 3 maps designées + intégration assets pixel art CC0 | jeu visuel complet | ✅ |
 | **11** | SFX + musique CC0 + polish + gamepad + fullscreen | MVP livré | ⏳ |
+
+## Phase 10 — 3 maps designées + assets pixel art CC0 (terminé)
+
+✅ Livrée dans la PR `feat/visual-assets` : *(URL backfill après merge)*
+
+> Direction artistique alignée avec le mood board envoyé par Saad (TowerFall Sacred Forest / Twilight Spire / Cataclysm). Stratégie d'asset retenue : **100% procédural CC0** généré côté client au boot — aucun fichier PNG versionné, tout en TypeScript via HTML5 Canvas → `PIXI.Texture`. Bundle léger, CC0 par construction, tunable par variable. Voir `docs/visual-style.md` pour le contrat artistique complet.
+
+- **Mood board contractuel** — `docs/moodboard/README.md` liste les niveaux TowerFall référencés (Sacred Forest, Twilight Spire, Cataclysm + Tower Forge, Celeste, Hyper Light Drifter, Dead Cells) **sans redistribuer** les screenshots copyright. Le dossier `inspirations/` local est gitignoré.
+- **`docs/visual-style.md`** — contrat artistique : 3 palettes 32 couleurs (8 familles × 4 ramps shadow/mid/light/spec), 6 silhouettes archers signatures, timings d'animation, règles tile-painter (couches mid → bord organique → ombrage → détail variant → spec).
+- **`@arrowfall/shared/tilemap`** — `ThemeId = "sacred-grove" | "twin-spires" | "old-temple"`, `ALL_THEMES`, `DEFAULT_THEME`. `MapData.theme` (required) et `MapJson.theme?` (optional, défaut `sacred-grove` pour back-compat des fixtures Phase 5 `arena-01.json`/`arena-02.json`). `parseMap` valide le theme contre `ALL_THEMES`. `serializeMap` n'émet `theme` que s'il diffère du défaut → arena-01/02 round-trip identique.
+- **`packages/client/src/assets/`** — module générateur procédural (8 fichiers, ~1500 lignes) :
+  - `palettes.ts` — `PALETTES` indexé par `ThemeId` (3 thèmes × 8 familles × 4 hex), `ARCHER_SKINS` (6 skins × 9 fields).
+  - `canvas.ts` — utilitaires (`newCanvas`, `px`, `rect`, `outline`, `vGradient`, `mulberry32` PRNG, `tileSeed` FNV-1a hashing pour variantes déterministes).
+  - `tile-painter.ts` — `buildTileSprites(theme)` génère 4 variantes SOLID (plain / fissure / rune / bevel) + JUMPTHRU + SPIKE. Pipeline 5 couches : mid fill → bord organique themed (mousse / neige / runes) → ombrage directionnel → détail variant → spec highlight. `variantKeyFor(theme, kind, tx, ty)` choisit la variante via `tileSeed` → variantes figées entre rebuilds.
+  - `archer-painter.ts` — `buildArcherSprites(skin)` génère ~32 frames (idle 4 / walk 6 / jump / fall / dodge 4 / aim ×8 / shoot 3 / death 4). Silhouette commune body 6×5 + head 4×3, dressing par skin (capuche feuille / plumet / hood pointu / chapeau plat / masque / diadème). Helper `aimDirOf(ax, ay, facing)` → `AimDir` 8-way.
+  - `arrow-painter.ts` — sprites flèches 12×4 px (déborde 2 px le collider 8×2 pour fletching/tip). Bombs 4 frames mèche, drills 4 frames helix, lasers 2 frames pulse + halo cyan. `flyingFrameFor(type, age)` route selon `arrow.age`.
+  - `chest-painter.ts` — 6 frames (closed → opening lift × 4 → halo + sparkle). `chestFrameFor(status, openTimer, duration)` mappe le timer engine vers la frame.
+  - `shield-painter.ts` — 4 frames overlay 24×24, ring blanc + 4 sigils cyan orbitaux qui tournent.
+  - `background-painter.ts` — 2 layers parallax 480×270 par thème : back (ciel/voûte sombre + clouds/stars/sigils) + mid (arbres / montagnes neigeuses / colonnes + idole). Génération via `vGradient` + helpers de silhouette (`paintTriangle`, `paintTree`).
+  - `index.ts` — `buildAllAssets()` agrège tout en `AssetRegistry` (Map de `Texture` indexées). Mesuré ~150 ms cold sur laptop mid-range.
+- **3 maps thématiques** (`packages/client/src/maps/`) :
+  - `sacred-grove.json` — symétrique, plateformes étagées, 4 spawns + 2 chests, ambiance forêt.
+  - `twin-spires.json` — verticale, 2 tours latérales SOLID + balcons JUMPTHRU à 3 niveaux, 4 spawns + 3 chests.
+  - `old-temple.json` — labyrinthique, beaucoup de petites JUMPTHRU en chicane, 4 spawns + 2 chests, spikes punitifs.
+- **Renderers réécrits avec dual-path** — chaque renderer accepte `assets: AssetRegistry | null`. Si non-null → mode sprites Phase 10 (Sprite pool, frame picker, anim cosmétique via `renderFrame` interne au renderer indépendant du tick). Si null → fallback Phase 4/9b (Graphics rect/poly intact). Toggle via env Vite `VITE_NO_SPRITES=1` dans `main.ts`.
+  - `TilemapRenderer` — bake une fois au constructor : Sprite par tile non-EMPTY avec variant déterministe.
+  - `ArchersRenderer` — pool de Sprites keyé par `archer.id`, frame picker `pickFrame(archer, renderFrame)` (death/dodge/shoot/jump/fall/walk/idle), facing flip via `scale.x = -1`, shield overlay 4-frame spinning sigils, alpha pulse pour iframe.
+  - `ArrowsRenderer` — Sprite pool indexé, anchor centre + rotation = `atan2(vy, vx)`, frame cyclée selon `arrow.age`.
+  - `ChestsRenderer` — Sprite pool keyé par `chest.id`, frame indexée via `chestFrameFor`.
+  - `BackgroundRenderer` (nouveau) — 2 `TilingSprite` pour back/mid layers, `tilePosition.x = -tick × 0.4 / 0.7` (drift cosmétique automatique).
+- **Map cycler local** — touche **`M`** dans le mode hot-seat cycle entre les 3 maps thématiques (rebuild tilemap + background theme + reset round). Le cycler skip en mode 4P (reste sur arena-02) et n'affecte pas le mode networked (le serveur dicte la map).
+- **`Game` + `main.ts`** — `Game` accepte un 4e param `assets: AssetRegistry | null` (passé aux 5 renderers). `main.ts` appelle `buildAllAssets()` sauf si `import.meta.env.VITE_NO_SPRITES === "1"`. Background `setTheme(map.theme)` + `update(world.tick)` à chaque render frame.
+- **`assets/CREDITS.md`** — documente la stratégie procédurale CC0 et liste tous les assets générés (tilesheets 3 thèmes, 6 spritesheets archers, sprites flèches + coffres + shield, backgrounds 2 layers × 3 thèmes). Aucun asset tiers.
+- **Tradeoffs** :
+  - Networked mode utilise toujours `arena-01`/`arena-02` (pas de `MatchState.theme` côté server). Phase 11 wirera la sélection de map depuis le lobby.
+  - Aim 8-direction sprite (`aim_${dir}`) généré mais pas branché sur l'animation runtime — l'engine `Archer` ne stocke pas la dernière direction de visée. Les renderers utilisent les frames idle/walk/jump/fall/shoot/dodge/death qui couvrent 95% du temps écran. Branchement aim live = Phase 11 si nécessaire.
+  - Anim cycler basé sur `renderFrame` interne (cosmétique) → désynchronisé entre 2 onglets. Sans incidence (purement visuel, pas d'effet gameplay).
+- **Tests** : engine 163 (inchangé), server 75 (inchangé), client 30 → **94** (+64 :
+  - `palettes.test.ts` 33 cas (3 thèmes × 7 familles × 4 hex + 6 archers × 9 fields + diversité).
+  - `painter-helpers.test.ts` 23 cas (`mulberry32` déterminisme, `tileSeed` stabilité, `variantKeyFor` ranges, `aimDirOf` 8 dirs, `flyingFrameFor` cycles, `chestFrameFor` clamping).
+  - `themed-maps.test.ts` 8 cas (3 maps × {theme correct, ≥ 4 spawns, ≥ 2-3 chests, dimensions 30×17, id} + back-compat arena-01).
+- **Build Vite** : 247 KB minifié, 78 KB gzippé pour le code app — sous le budget 2 MB de la spec. La génération procédurale ajoute ~50 KB de code mais 0 KB d'assets binaires.
+- **Validation manuelle** (à exécuter au merge) :
+  1. `pnpm --filter @arrowfall/client dev` → `http://localhost:5173`
+  2. Mode local → on atterrit sur Sacred Grove (forêt verte ensoleillée, cube doré chest, archer p1 vert avec capuche feuille).
+  3. Toucher `M` → bascule sur Twin Spires (crépuscule hivernal violet, neige drifting, 2 tours stones bleu).
+  4. Toucher `M` → bascule sur Old Temple (ténèbres + colonnes + idole + or rune + torches orange).
+  5. Spawner 2-4 archers via `PLAYER_COUNT` → vérifier silhouettes distinctes (verdant/crimson/azure/saffron).
+  6. Animations : marcher (cycle jambes), sauter (knees up), tomber (legs apart), tirer (recoil 3 frames), dodge (motion streaks), prendre coup (death scatter 4 frames).
+  7. Variante visuelle : `VITE_NO_SPRITES=1 pnpm --filter @arrowfall/client dev` → fallback rectangles Phase 4/9b (régression check zéro).
 
 ## Phase 9b — Flèches Drill + Laser + Shield (terminé)
 

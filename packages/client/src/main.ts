@@ -2,6 +2,7 @@ import { Application } from "pixi.js";
 import { Game, type GameMode } from "./game/index.js";
 import { createRoom, joinRoomByCode } from "./net/index.js";
 import { MenuOverlay } from "./ui/menu-overlay.js";
+import { buildAllAssets, type AssetRegistry } from "./assets/index.js";
 import "./style.css";
 
 // Phase 8 — page boot orchestrator.
@@ -29,6 +30,21 @@ await app.init({
 });
 container.appendChild(app.canvas);
 
+// Phase 10 — Generate every visual asset procedurally at boot. Skipped
+// when VITE_NO_SPRITES=1 (devs iterating on physics: Phase-4-style
+// rectangles render zero allocs and zero asset-build cost).
+const noSprites = import.meta.env.VITE_NO_SPRITES === "1";
+let assets: AssetRegistry | null = null;
+if (!noSprites) {
+  const t0 = performance.now();
+  assets = buildAllAssets();
+  console.log(
+    `[arrowfall] assets built in ${(performance.now() - t0).toFixed(1)} ms`,
+  );
+} else {
+  console.log("[arrowfall] VITE_NO_SPRITES=1 — using Phase-4 fallback rendering");
+}
+
 const menu = new MenuOverlay();
 
 // Game holder — instantiated lazily once the user picks a mode. Reusing
@@ -40,7 +56,7 @@ const ensureGame = (mode: GameMode, room: Parameters<Game["attachRoom"]>[0] | nu
   if (game !== null) {
     throw new Error("ensureGame: a game is already running");
   }
-  game = new Game(app, mode, room);
+  game = new Game(app, mode, room, assets);
   game.start();
   return game;
 };

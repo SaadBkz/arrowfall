@@ -128,6 +128,38 @@ Les bindings utilisent `event.code` (layout-independent — `KeyA` = position ph
 
 P3 (vert) et P4 (jaune) sont câblés (Numpad et `[ ] ; ' / \ .`) mais **non validés ergonomiquement** : au-delà de 2 joueurs, les claviers physiques ont du **N-key rollover** limité (anti-ghost matrices) — plusieurs touches simultanées peuvent être ignorées. Les manettes en Phase 11 résoudront ce problème proprement. Tirer sans direction = horizontal vers le facing de l'archer ; combiner directions + tir = visée 8 directions (rappel spec §4.1). La fenêtre d'iframe du dodge sert aussi à catch les flèches (rappel spec §2.4). Les flèches qui sortent par la droite réapparaissent à gauche (wrap continu, spec §5.2).
 
+## Phase 10 — Direction artistique pixel art + 3 maps thématiques
+
+Phase 10 introduit un **système d'assets entièrement procédural CC0** : aucun fichier PNG/binaire d'asset n'est versionné — tous les visuels sont générés au boot du client par du code TypeScript via `<canvas>`, puis convertis en `PIXI.Texture`. CC0 par construction (notre code), bundle léger (~+50 KB code), reproductible et tunable. Voir [`docs/visual-style.md`](./docs/visual-style.md) pour le contrat artistique complet et [`assets/CREDITS.md`](./assets/CREDITS.md) pour la liste des assets générés.
+
+**3 maps thématiques** sont livrées avec leur palette dédiée (32 couleurs en 8 familles × 4 ramps chacune) :
+
+| Map | Theme | Palette dominante | Layout |
+|---|---|---|---|
+| **Sacred Grove** | Forêt diurne | mousse + ciel bleu + dorures | symétrique, plateformes étagées |
+| **Twin Spires** | Crépuscule hivernal | pierre froide + neige + bannières rouges | verticale, deux tours latérales |
+| **Old Temple** | Sous-sol doré sur noir | pierre pourpre + or rune + cyan magique | labyrinthique, beaucoup de jumpthru |
+
+En mode local, la touche **`M`** cycle entre les 3 maps (rebuild instantané du tilemap + parallax + reset du round).
+
+**6 archers visuellement distincts** (Verdant / Crimson / Azure / Saffron / Onyx / Frost) avec silhouettes signatures (capuche feuille, plumet, hood pointu, chapeau plat, masque, diadème cristal) au-delà de la simple variation de couleur. Chaque archer dispose de ~32 frames d'animation (idle 4 / walk 6 / jump / fall / dodge 4 / aim ×8 / shoot 3 / death 4) — l'`ArchersRenderer` choisit la frame depuis l'état moteur (`alive`, `state`, `vel.y`, `dodgeIframeTimer`, `shootCooldownTimer`, `facing`) sans toucher au World.
+
+**Background parallax 2 layers** par thème : couche back (`×0.4`) avec ciel/cosmos/idole, couche mid (`×0.7`) avec arbres/montagnes/colonnes. Drift cosmétique automatique au tick.
+
+**Sprites Phase 9b mis à niveau** : flèches normal/bomb/drill/laser avec frames d'animation (mèche bombe 4f, helix drill 4f, pulse laser 2f), coffre avec 6 frames d'ouverture (cadenas → halo → étincelles), shield avec 4 sigils orbitaux qui tournent.
+
+**Toggle dev `VITE_NO_SPRITES=1`** — bascule les renderers sur les rectangles Phase 4/9b (pratique pour itérer sur la physique sans le coût de génération d'assets).
+
+```bash
+# Mode sprites (par défaut Phase 10)
+pnpm --filter @arrowfall/client dev
+
+# Mode rectangles (legacy Phase 4/9b — itération rapide sur la physique)
+VITE_NO_SPRITES=1 pnpm --filter @arrowfall/client dev
+```
+
+Tests : engine 163 (inchangé), server 75 (inchangé), client 30 → **94** (+64 : palettes 33, painter helpers 23, themed maps 8). Aucune régression gameplay vs Phase 9b.
+
 ## Phase 8 — Lobby + codes de room + fin de round/match
 
 Le boot du client affiche désormais un **menu HTML** par défaut : trois entrées, **Hot-seat** (local 1-4P), **Host a room** (génère un code 4 lettres), **Join with code** (rejoindre par code). Une fois 2 joueurs prêts dans le lobby, le match démarre — le premier à 3 wins remporte la partie. Les rounds enchaînent automatiquement avec un freeze de 3 s après chaque kill (le winner est tinté à sa couleur), et un écran de victoire de 6 s à la fin du match avant retour au lobby.
