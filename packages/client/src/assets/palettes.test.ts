@@ -13,7 +13,11 @@ import {
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
-const FAMILIES: ReadonlyArray<keyof ThemePalette> = [
+// Exclude `transparent` — that field is the literal 0 (alpha sentinel),
+// not a Ramp tuple, and is checked separately below.
+type RampFamily = Exclude<keyof ThemePalette, "transparent">;
+
+const FAMILIES: ReadonlyArray<RampFamily> = [
   "stone",
   "accent",
   "wood",
