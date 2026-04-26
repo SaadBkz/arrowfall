@@ -57,7 +57,8 @@ const startHosted = async (): Promise<void> => {
     const room = await createRoom();
     onRoomReady(room);
   } catch (err) {
-    menu.showError(`Could not create room: ${describeError(err)}`, () => showStartMenu());
+    // createRoom already prefixes "Could not create room: ..." — pass through.
+    menu.showError(describeError(err), () => showStartMenu());
   }
 };
 
@@ -67,7 +68,8 @@ const startGuest = async (code: string): Promise<void> => {
     const room = await joinRoomByCode(code);
     onRoomReady(room);
   } catch (err) {
-    menu.showError(`Could not join "${code}": ${describeError(err)}`, () => showStartMenu());
+    // joinRoomByCode already prefixes "Could not join ..." — pass through.
+    menu.showError(describeError(err), () => showStartMenu());
   }
 };
 
