@@ -72,7 +72,16 @@ export class HudRenderer {
         line.text = `${id}: gone`;
       } else {
         const status = a.alive ? "alive" : "dead ";
-        line.text = `${id}: inv ${a.inventory}/${MAX_INVENTORY} ${status}`;
+        // Phase 9b — surface the typed inventory: N=normal, B=bomb,
+        // D=drill, L=laser. Empty slots are silenced to keep the line
+        // tight; in early rounds players only carry normals so the
+        // line reads e.g. "p1: N3 alive". A shield gets a [+] suffix.
+        const parts: string[] = [`N${a.inventory}/${MAX_INVENTORY}`];
+        if (a.bombInventory > 0) parts.push(`B${a.bombInventory}`);
+        if (a.drillInventory > 0) parts.push(`D${a.drillInventory}`);
+        if (a.laserInventory > 0) parts.push(`L${a.laserInventory}`);
+        const shield = a.hasShield ? " [+]" : "";
+        line.text = `${id}: ${parts.join(" ")}${shield} ${status}`;
       }
     }
 

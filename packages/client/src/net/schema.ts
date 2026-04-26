@@ -34,6 +34,11 @@ export class ArcherState extends Schema {
   // Phase 9a — bomb arrows held (separate counter from `inventory`,
   // which is normal arrows only).
   declare bombInventory: number;
+  // Phase 9b — drill / laser inventory + shield. Same flat shape as
+  // bombInventory.
+  declare drillInventory: number;
+  declare laserInventory: number;
+  declare hasShield: boolean;
 
   constructor() {
     super();
@@ -50,6 +55,9 @@ export class ArcherState extends Schema {
     this.spawnIframeTimer = 0;
     this.dodgeIframeTimer = 0;
     this.bombInventory = 0;
+    this.drillInventory = 0;
+    this.laserInventory = 0;
+    this.hasShield = false;
   }
 }
 
@@ -67,6 +75,9 @@ defineTypes(ArcherState, {
   spawnIframeTimer: "uint16",
   dodgeIframeTimer: "uint16",
   bombInventory: "uint8",
+  drillInventory: "uint8",
+  laserInventory: "uint8",
+  hasShield: "boolean",
 });
 
 export class ArrowState extends Schema {
@@ -107,7 +118,9 @@ defineTypes(ArrowState, {
   arrowType: "string",
 });
 
-// Phase 9a — chest mirror (matches server/src/state/chest-state.ts).
+// Phase 9a/9b — chest mirror (matches server/src/state/chest-state.ts).
+// `lootKind` ("arrows" | "shield") drives whether lootType + lootCount
+// are read; on shield chests the latter two are ignored.
 export class ChestState extends Schema {
   declare id: string;
   declare posX: number;
@@ -115,6 +128,7 @@ export class ChestState extends Schema {
   declare status: string;
   declare openTimer: number;
   declare openerId: string;
+  declare lootKind: string;
   declare lootType: string;
   declare lootCount: number;
 
@@ -126,6 +140,7 @@ export class ChestState extends Schema {
     this.status = "closed";
     this.openTimer = 0;
     this.openerId = "";
+    this.lootKind = "arrows";
     this.lootType = "normal";
     this.lootCount = 0;
   }
@@ -138,6 +153,7 @@ defineTypes(ChestState, {
   status: "string",
   openTimer: "uint16",
   openerId: "string",
+  lootKind: "string",
   lootType: "string",
   lootCount: "uint8",
 });
