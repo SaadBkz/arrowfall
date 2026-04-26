@@ -92,10 +92,10 @@ const paintFog = (theme: ThemeId): HTMLCanvasElement => {
   // pattern is figé across rebuilds (visual diff continuity).
   const seed =
     theme === "sacred-grove"
-      ? 0x5acred
+      ? 0x5acbeef0
       : theme === "twin-spires"
-        ? 0x5917e5
-        : 0x7e_0ple;
+        ? 0x5917e500
+        : 0x7e_0d1e_0;
 
   // ImageData for direct pixel writes — much faster than 70k fillRects.
   const img = g.createImageData(FOG_W, FOG_H);

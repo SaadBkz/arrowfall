@@ -1,6 +1,6 @@
 import { Application, TextureSource } from "pixi.js";
 import { ARENA_HEIGHT_PX, ARENA_WIDTH_PX } from "@arrowfall/shared";
-import { Game, type GameMode } from "./game/index.js";
+import { Game, type GameMode, VIEWPORT_HEIGHT_PX, VIEWPORT_WIDTH_PX } from "./game/index.js";
 import { createRoom, joinRoomByCode } from "./net/index.js";
 import { MenuOverlay } from "./ui/menu-overlay.js";
 import { buildAllAssets, type AssetRegistry } from "./assets/index.js";
@@ -29,15 +29,15 @@ const joinParam = params.get("join");
 const container = document.getElementById("game");
 if (!container) throw new Error("#game container not found");
 
-// Pixel-perfect render target: Pixi draws at the canonical 480×270
-// internal resolution, then we CSS-scale the canvas <DOM element> to
-// fill the viewport. Browser nearest-neighbor upscale keeps pixels
-// crisp at any window size — no per-frame integer letterbox math, no
-// black bars, much bigger feel on a normal 1080p/1440p display.
+// Pixel-perfect render target: Pixi draws at the canonical viewport
+// resolution (Phase 10.5.a — 544×270, ARENA 480×270 + 32 px frame on
+// each side), then we CSS-scale the canvas <DOM element> to fill the
+// browser viewport. Browser nearest-neighbor upscale keeps pixels
+// crisp at any window size.
 const app = new Application();
 await app.init({
-  width: ARENA_WIDTH_PX,
-  height: ARENA_HEIGHT_PX,
+  width: VIEWPORT_WIDTH_PX,
+  height: VIEWPORT_HEIGHT_PX,
   backgroundColor: 0x000000,
   antialias: false,
   resolution: 1,
@@ -47,13 +47,11 @@ container.appendChild(app.canvas);
 
 const fitCanvas = (): void => {
   const ratio = Math.min(
-    window.innerWidth / ARENA_WIDTH_PX,
-    window.innerHeight / ARENA_HEIGHT_PX,
+    window.innerWidth / VIEWPORT_WIDTH_PX,
+    window.innerHeight / VIEWPORT_HEIGHT_PX,
   );
-  // Cap at the largest fractional ratio that keeps aspect; CSS handles
-  // letterboxing via centered absolute positioning.
-  const w = Math.floor(ARENA_WIDTH_PX * ratio);
-  const h = Math.floor(ARENA_HEIGHT_PX * ratio);
+  const w = Math.floor(VIEWPORT_WIDTH_PX * ratio);
+  const h = Math.floor(VIEWPORT_HEIGHT_PX * ratio);
   app.canvas.style.width = `${w}px`;
   app.canvas.style.height = `${h}px`;
   app.canvas.style.position = "absolute";
@@ -62,6 +60,11 @@ const fitCanvas = (): void => {
 };
 fitCanvas();
 window.addEventListener("resize", fitCanvas);
+
+// ARENA constants are still imported for any downstream code (e.g.
+// engine math); not used directly here anymore.
+void ARENA_WIDTH_PX;
+void ARENA_HEIGHT_PX;
 
 // Phase 10 — Generate every visual asset procedurally at boot. Skipped
 // when VITE_NO_SPRITES=1 (devs iterating on physics: Phase-4-style

@@ -24,16 +24,19 @@ import { ArrowsRenderer } from "./render/arrow.js";
 import { BackgroundRenderer } from "./render/background.js";
 import { ChestsRenderer } from "./render/chest.js";
 import { DecorationsRenderer } from "./render/decorations.js";
+import { FogRenderer } from "./render/fog.js";
+import { FrameRenderer } from "./render/frame.js";
 import { HudRenderer } from "./render/hud.js";
 import { RoundMessageRenderer } from "./render/round-message.js";
 import { TilemapRenderer } from "./render/tilemap.js";
+import { VignetteRenderer } from "./render/vignette.js";
 import {
   archerFromSnapshot,
   type MatchState,
   PredictionEngine,
   RemoteInterpolator,
 } from "../net/index.js";
-import type { AssetRegistry } from "../assets/index.js";
+import { type AssetRegistry, FRAME_PANEL_W } from "../assets/index.js";
 import arena01Json from "../maps/arena-01.json" with { type: "json" };
 import arena02Json from "../maps/arena-02.json" with { type: "json" };
 import sacredGroveJson from "../maps/sacred-grove.json" with { type: "json" };
@@ -45,6 +48,13 @@ import oldTempleJson from "../maps/old-temple.json" with { type: "json" };
 // crash, but ergonomics break down past 2 players on a single keyboard
 // (N-key rollover anti-ghost matrices) — gamepads are Phase 11.
 const PLAYER_COUNT = 2;
+
+// Phase 10.5.a — Viewport extends beyond the engine arena by FRAME_PANEL_W
+// pixels on each side, to host the decorative side panels (FrameRenderer)
+// without intruding on the playable 480×270. main.ts uses these to size
+// the Pixi Application and the CSS-scaled canvas.
+export const VIEWPORT_WIDTH_PX = ARENA_WIDTH_PX + FRAME_PANEL_W * 2;
+export const VIEWPORT_HEIGHT_PX = ARENA_HEIGHT_PX;
 
 export type GameMode = "local" | "networked";
 
@@ -88,13 +98,32 @@ const playerIds = (count: number): ReadonlyArray<string> => {
 export class Game {
   private readonly mode: GameMode;
   private readonly app: Application;
+  // Stage tree (Phase 10.5.a):
+  //   gameRoot                 — full viewport (544×270 logical)
+  //     ├── frame              — decorative side panels (32-px gutters)
+  //     └── playfield          — offset to x=FRAME_PANEL_W
+  //         ├── background
+  //         ├── decorations.back
+  //         ├── tilemap
+  //         ├── decorations.front
+  //         ├── arrows
+  //         ├── chests
+  //         ├── archers
+  //         ├── fog            — drifts above gameplay
+  //         ├── vignette       — corner darkening
+  //         ├── hud            — stays legible above vignette
+  //         └── roundMessage   — top of stack
   private readonly gameRoot: Container;
+  private readonly playfield: Container;
+  private readonly frame: FrameRenderer;
   private readonly background: BackgroundRenderer;
   private tilemap: TilemapRenderer;
   private readonly decorations: DecorationsRenderer;
   private readonly archers: ArchersRenderer;
   private readonly arrows: ArrowsRenderer;
   private readonly chests: ChestsRenderer;
+  private readonly fog: FogRenderer;
+  private readonly vignette: VignetteRenderer;
   private readonly hud: HudRenderer;
   private readonly roundMessage: RoundMessageRenderer;
   private readonly input: KeyboardInput;
@@ -182,54 +211,78 @@ export class Game {
     }));
 
     // Logical-coords container. `stage.scale` would scale the HUD-fps
-    // text the same as the playfield, so we place HUD inside this same
-    // root: integer scaling preserves crisp pixels for both.
+    // text the same as the playfield, so we place HUD inside the same
+    // playfield container: integer scaling preserves crisp pixels for
+    // both.
     this.gameRoot = new Container();
     this.app.stage.addChild(this.gameRoot);
 
-    // Background sits at the very bottom of the stage tree. In sprite
+    // Phase 10.5.a — Frame panels render at root, in the 32-px gutters
+    // outside the playfield. Added FIRST so they sit underneath if any
+    // overlap ever happens (today they don't — playfield occupies
+    // [FRAME_PANEL_W, FRAME_PANEL_W + ARENA_WIDTH_PX]).
+    this.frame = new FrameRenderer(this.assets, ARENA_WIDTH_PX);
+    this.frame.setTheme(this.mapData.theme);
+    this.gameRoot.addChild(this.frame.view);
+
+    // The playfield container holds every gameplay layer. Its origin is
+    // shifted right by FRAME_PANEL_W so all gameplay coordinates remain
+    // 0..ARENA_WIDTH_PX (no engine math change needed).
+    this.playfield = new Container();
+    this.playfield.x = FRAME_PANEL_W;
+    this.playfield.y = 0;
+    this.gameRoot.addChild(this.playfield);
+
+    // Background sits at the very bottom of the playfield. In sprite
     // mode it draws back+mid parallax layers; in fallback it's just a
     // solid BG_COLOR rect — same z-order as the Phase 4 bgGraphics.
     this.background = new BackgroundRenderer(this.assets);
     this.background.setTheme(this.mapData.theme);
-    this.gameRoot.addChild(this.background.view);
+    this.playfield.addChild(this.background.view);
 
     // Decorations live in TWO layers around the tilemap:
     //   back  → giant idols and floating sigils (atmosphere)
     //   front → torches, banners, chains, stalactites (foreground)
-    // We add the back container before the tilemap and the front
-    // container after, so the tilemap reads as the gameplay surface
-    // sandwiched between ambience.
     this.decorations = new DecorationsRenderer(this.assets);
-    this.gameRoot.addChild(this.decorations.back);
+    this.playfield.addChild(this.decorations.back);
 
     this.tilemap = new TilemapRenderer(this.mapData, this.assets);
-    this.gameRoot.addChild(this.tilemap.view);
+    this.playfield.addChild(this.tilemap.view);
 
-    this.gameRoot.addChild(this.decorations.front);
+    this.playfield.addChild(this.decorations.front);
     this.decorations.setMap(this.mapData);
 
     this.arrows = new ArrowsRenderer(this.assets);
-    this.gameRoot.addChild(this.arrows.view);
+    this.playfield.addChild(this.arrows.view);
 
     // Chests sit between arrows and archers so an archer standing on
     // top of a chest is drawn over the chest (not the other way around).
     this.chests = new ChestsRenderer(this.assets);
-    this.gameRoot.addChild(this.chests.view);
+    this.playfield.addChild(this.chests.view);
 
     this.archers = new ArchersRenderer(this.assets);
-    this.gameRoot.addChild(this.archers.view);
+    this.playfield.addChild(this.archers.view);
+
+    // Phase 10.5.a — Atmosphere layer above gameplay. Fog drifts;
+    // vignette is static. Both render BELOW HUD/roundMessage so text
+    // stays fully readable.
+    this.fog = new FogRenderer(this.assets);
+    this.fog.setTheme(this.mapData.theme);
+    this.playfield.addChild(this.fog.view);
+
+    this.vignette = new VignetteRenderer(this.assets);
+    this.playfield.addChild(this.vignette.view);
 
     void ARENA_WIDTH_PX;
     void ARENA_HEIGHT_PX;
 
     this.hud = new HudRenderer();
-    this.gameRoot.addChild(this.hud.view);
+    this.playfield.addChild(this.hud.view);
 
     // Round-end overlay sits on top of everything so it stays readable
     // on top of fragmentation animations.
     this.roundMessage = new RoundMessageRenderer();
-    this.gameRoot.addChild(this.roundMessage.view);
+    this.playfield.addChild(this.roundMessage.view);
 
     // Local mode seeds the world with the slot archers; networked mode
     // starts empty and waits for the server's first state snapshot.
@@ -294,16 +347,18 @@ export class Game {
     }));
 
     // Tear down old tilemap, build a new one for the new theme.
-    this.gameRoot.removeChild(this.tilemap.view);
+    this.playfield.removeChild(this.tilemap.view);
     this.tilemap.dispose();
     this.tilemap = new TilemapRenderer(next, this.assets);
     // Re-insert at the right z-position (between the back-decorations
     // and the front-decorations layers).
-    const tilemapZ = this.gameRoot.getChildIndex(this.decorations.front);
-    this.gameRoot.addChildAt(this.tilemap.view, tilemapZ);
+    const tilemapZ = this.playfield.getChildIndex(this.decorations.front);
+    this.playfield.addChildAt(this.tilemap.view, tilemapZ);
 
     this.background.setTheme(next.theme);
     this.decorations.setMap(next);
+    this.frame.setTheme(next.theme);
+    this.fog.setTheme(next.theme);
     this.resetWorldLocal();
     console.log(`[arrowfall] map → ${next.id} (${next.theme})`);
   }
@@ -377,12 +432,15 @@ export class Game {
       this.cycleMapHandler = null;
     }
     this.input.dispose();
+    this.frame.dispose();
     this.tilemap.dispose();
     this.decorations.dispose();
     this.archers.dispose();
     this.arrows.dispose();
     this.chests.dispose();
     this.background.dispose();
+    this.fog.dispose();
+    this.vignette.dispose();
     this.hud.dispose();
     this.roundMessage.dispose();
   }
@@ -438,6 +496,7 @@ export class Game {
     this.accumulator = runFixedStep(this.app.ticker.deltaMS, this.accumulator, stepFn);
 
     this.background.update(this.world.tick);
+    this.fog.update(this.world.tick);
     this.archers.render(sortedArchers(this.world));
     this.arrows.render(this.world.arrows);
     this.chests.render(this.world.chests);
@@ -501,6 +560,7 @@ export class Game {
           ? "connecting…"
           : `error: ${this.netError ?? "unknown"}`;
     this.background.update(this.world.tick);
+    this.fog.update(this.world.tick);
     this.archers.render(sortedArchers(this.world));
     this.arrows.render(this.world.arrows);
     this.chests.render(this.world.chests);
