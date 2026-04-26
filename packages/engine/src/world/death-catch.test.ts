@@ -38,7 +38,7 @@ const buildWorld = (
   const map = blankMap();
   const m = new Map<string, Archer>();
   for (const a of archers) m.set(a.id, a);
-  return { map, archers: m, arrows, tick: 0, events: [] };
+  return { map, archers: m, arrows, chests: [], tick: 0, events: [] };
 };
 
 const neutralFor = (ids: ReadonlyArray<string>): Map<string, ArcherInput> => {

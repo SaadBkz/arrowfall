@@ -83,7 +83,10 @@ const onRoomReady = (room: Awaited<ReturnType<typeof createRoom>>): void => {
     const phase = room.state.phase;
     if (phase === "lobby") {
       menu.showLobby(room.state, room.sessionId, () => {
-        const current = room.state.ready.get(room.sessionId) === true;
+        // `ready` can be undefined for one tick after a fresh join (the
+        // @colyseus/schema 3.x decoder bypasses the constructor); treat
+        // undefined as "not ready" so the toggle still emits true.
+        const current = room.state.ready?.get(room.sessionId) === true;
         g.sendReady(!current);
       });
     } else if (phase === "match-end") {

@@ -92,16 +92,21 @@ export const matchStateToWorld = (
   // expect archer.id (the slot id, p1..p6) as the Map key — that's how
   // colors are assigned (archerColorFor(id)) and HUD rows are listed.
   // Re-key here so the renderers stay agnostic to the network layer.
-  state.archers.forEach((archerSt: ArcherState) => {
+  //
+  // Defensive `?.` against @colyseus/schema 3.x: the decoder
+  // Object.create()s the state, bypassing our constructor defaults, so
+  // a collection field stays undefined until the server emits a patch
+  // touching it.
+  state.archers?.forEach((archerSt: ArcherState) => {
     const a = archerFromState(archerSt);
     archers.set(a.id, a);
   });
   const arrows: Arrow[] = [];
-  state.arrows.forEach((arrowSt: ArrowState) => {
+  state.arrows?.forEach((arrowSt: ArrowState) => {
     arrows.push(arrowFromState(arrowSt));
   });
   const chests: Chest[] = [];
-  state.chests.forEach((chestSt: ChestState) => {
+  state.chests?.forEach((chestSt: ChestState) => {
     chests.push(chestFromState(chestSt));
   });
   return {
@@ -109,7 +114,7 @@ export const matchStateToWorld = (
     archers,
     arrows,
     chests,
-    tick: state.tick,
+    tick: state.tick ?? 0,
     events: [],
   };
 };

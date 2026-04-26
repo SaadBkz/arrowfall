@@ -15,6 +15,7 @@ const buildWorld = (archers: ReadonlyArray<Archer>): World => {
     map,
     archers: new Map(archers.map((a) => [a.id, a])),
     arrows: [],
+    chests: [],
     tick: 0,
     events: [],
   };
